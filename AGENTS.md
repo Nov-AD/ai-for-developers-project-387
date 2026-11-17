@@ -15,6 +15,10 @@
 
 ## Agent skills
 
+### GitHub Actions
+
+При запросе через `/oc` или `/opencode` сначала прочитай `docs/agents/opencode.md`: загрузка проектных скиллов и продолжение обсуждения Issue/PR между сессиями.
+
 ### Issue tracker
 
 Задачи и спеки этого репозитория живут в GitHub Issues, работа через `gh` CLI. См. `docs/agents/issue-tracker.md`.
