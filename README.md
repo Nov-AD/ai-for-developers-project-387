@@ -1,10 +1,12 @@
-# Календарь звонков
+# Календарь звонков (продолжение)
 
 
-[![hexlet-check](https://github.com/Nov-AD/ai-for-developers-project-386/actions/workflows/hexlet-check.yml/badge.svg)](https://github.com/Nov-AD/ai-for-developers-project-386/actions)
-[![CI](https://github.com/Nov-AD/ai-for-developers-project-386/actions/workflows/ci.yml/badge.svg)](https://github.com/Nov-AD/ai-for-developers-project-386/actions/workflows/ci.yml)
+[![hexlet-check](https://github.com/Nov-AD/ai-for-developers-project-387/actions/workflows/hexlet-check.yml/badge.svg)](https://github.com/Nov-AD/ai-for-developers-project-387/actions)
+[![CI](https://github.com/Nov-AD/ai-for-developers-project-387/actions/workflows/ci.yml/badge.svg)](https://github.com/Nov-AD/ai-for-developers-project-387/actions/workflows/ci.yml)
 
 «Запись на звонок» — упрощённый сервис бронирования времени по мотивам [Cal.com](https://cal.com). Владелец календаря публикует доступное время для встреч, а гость выбирает свободный слот и записывается на звонок. Это небольшое, но законченное приложение: весь путь от проектирования и API-контракта до запуска в облаке.
+
+Продолжение проекта: интеграция работы агентов в GitHub-проект.
 
 Учебный проект Хекслета: https://ru.hexlet.io/programs/ai-for-developers
 Как это должно работать: https://files.hexlet.app/a/2ipc5m
@@ -150,8 +152,8 @@ Workflow `.github/workflows/ci.yml` вызывает ту же `mise run check` 
 Понадобятся только [mise](https://mise.jdx.dev/) и Git. Версии Node.js, pnpm, hk, pitchfork, jactionlint, Betterleaks, OSV-Scanner, vacuum и oasdiff зафиксированы в `mise.toml`, а контрольные суммы загрузок — в `mise.lock`.
 
 ```bash
-git clone https://github.com/Nov-AD/ai-for-developers-project-386.git
-cd ai-for-developers-project-386
+git clone https://github.com/Nov-AD/ai-for-developers-project-387.git
+cd ai-for-developers-project-387
 
 mise install        # Node.js, pnpm, hk и pitchfork нужных версий
 mise run setup      # зависимости из lock-файла + Git-хуки hk
