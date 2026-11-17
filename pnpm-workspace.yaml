@@ -46,3 +46,8 @@ minimumReleaseAgeExclude:
   - dependency-cruiser@18.8.0
   - oxfmt@0.79.0
   - oxlint@1.94.0
+auditConfig:
+  # Owner-approved, disputed dev-only finding (#1). Review by 2026-12-01.
+  # Rationale and removal conditions: docs/quality-gates.md.
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf
