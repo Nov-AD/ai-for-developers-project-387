@@ -1,12 +1,24 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import type { Booking } from '@calendar/sdk'
 
-// Observe real browser traffic; no route interception, API seeding or fetch mocks.
+// Observe real browser traffic; no route interception or fetch mocks.
+// The filter scenario seeds records through the real API, not a mock.
 function bookingResponse(page: Page) {
   return page.waitForResponse(
     (response) =>
       response.url() === new URL('/bookings', page.url()).href &&
       response.request().method() === 'POST'
+  )
+}
+
+function bookingsQueryMatches(url: string, expected: Record<string, string> = {}) {
+  const parsed = new URL(url)
+  if (parsed.pathname !== '/bookings') return false
+  const keys = [...parsed.searchParams.keys()].sort()
+  const expectedKeys = Object.keys(expected).sort()
+  return (
+    keys.length === expectedKeys.length &&
+    expectedKeys.every((key) => parsed.searchParams.get(key) === expected[key])
   )
 }
 
@@ -177,5 +189,175 @@ test('владелец создаёт тип встречи, гость запи
       .filter({ hasText: /GMT\+3/ })
       .allTextContents()
     for (const time of confirmationTimes) await expect(records).toContainText(time)
+  })
+})
+
+function ownerCalendarDate(instant: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date(instant))
+  const part = (type: 'year' | 'month' | 'day') =>
+    parts.find((candidate) => candidate.type === type)!.value
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
+type SeededSlot = { start: string; end: string }
+
+async function createType(request: APIRequestContext, name: string, durationMinutes: number) {
+  const response = await request.post('/meeting-types', { data: { name, durationMinutes } })
+  expect(response.status()).toBe(201)
+  return (await response.json()) as { id: string; name: string }
+}
+
+async function availableSlots(
+  request: APIRequestContext,
+  meetingTypeId: string
+): Promise<SeededSlot[]> {
+  const response = await request.get('/availability', { params: { meetingTypeId } })
+  expect(response.status()).toBe(200)
+  const body = (await response.json()) as { slots: SeededSlot[] }
+  return body.slots
+}
+
+async function createBooking(
+  request: APIRequestContext,
+  meetingTypeId: string,
+  start: string,
+  guestName: string
+) {
+  const response = await request.post('/bookings', {
+    data: { meetingTypeId, start, guestName }
+  })
+  expect(response.status()).toBe(201)
+}
+
+test('фильтры работают вместе, сохраняются при обновлении и сбрасываются', async ({
+  page,
+  request
+}) => {
+  const suffix = Date.now().toString()
+  const typeA = await createType(request, `Знакомство ${suffix}`, 30)
+  const typeB = await createType(request, `Обзор ${suffix}`, 45)
+  const guestAnna = `Анна ${suffix}`
+  const guestBoris = `Борис ${suffix}`
+
+  const slotsA = await availableSlots(request, typeA.id)
+  const slotsB = await availableSlots(request, typeB.id)
+  expect(slotsA.length, 'type A must have available slots').toBeGreaterThan(0)
+  expect(slotsB.length, 'type B must have available slots').toBeGreaterThan(0)
+
+  const annaTypeA = slotsA[0]!
+  const annaDate = ownerCalendarDate(annaTypeA.start)
+  const annaTypeB = slotsB.find((slot) => ownerCalendarDate(slot.start) !== annaDate)
+  expect(annaTypeB, 'type B needs a slot on another owner date').toBeDefined()
+  const annaTypeBDate = ownerCalendarDate(annaTypeB!.start)
+  const borisTypeA = slotsA.find(
+    (slot) =>
+      ownerCalendarDate(slot.start) !== annaDate && ownerCalendarDate(slot.start) !== annaTypeBDate
+  )
+  expect(borisTypeA, 'type A needs a slot on a third owner date').toBeDefined()
+
+  await createBooking(request, typeA.id, annaTypeA.start, guestAnna)
+  await createBooking(request, typeB.id, annaTypeB!.start, guestAnna)
+  await createBooking(request, typeA.id, borisTypeA!.start, guestBoris)
+
+  const initialResponse = page.waitForResponse(
+    (response) => response.request().method() === 'GET' && bookingsQueryMatches(response.url())
+  )
+  await page.goto('/owner')
+  const records = page
+    .getByRole('list', { name: 'Предстоящие записи', exact: true })
+    .getByRole('listitem')
+  const nameInput = page.getByLabel('Имя гостя', { exact: true })
+  const typeSelect = page.getByLabel('Тип встречи', { exact: true })
+  const fromDate = page.getByLabel('Дата с', { exact: true })
+  const toDate = page.getByLabel('Дата по', { exact: true })
+
+  await test.step('базовый список показывает все три записи без параметров запроса', async () => {
+    expect((await initialResponse).status()).toBe(200)
+    await expect(records.filter({ hasText: guestAnna })).toHaveCount(2)
+    await expect(records.filter({ hasText: guestBoris })).toHaveCount(1)
+    await expect(nameInput).toHaveValue('')
+    await expect(typeSelect).toHaveValue('')
+    await expect(fromDate).toHaveValue('')
+    await expect(toDate).toHaveValue('')
+  })
+
+  const allFilters = {
+    guestName: guestAnna,
+    meetingTypeId: typeA.id,
+    fromDate: annaDate,
+    toDate: annaDate
+  }
+
+  await test.step('имя, тип и диапазон дат сужают выдачу одновременно', async () => {
+    const responsePromise = page.waitForResponse((response) =>
+      bookingsQueryMatches(response.url(), allFilters)
+    )
+    await nameInput.fill(`  ${guestAnna}  `)
+    await typeSelect.selectOption({ label: typeA.name })
+    await fromDate.fill(annaDate)
+    await toDate.fill(annaDate)
+    expect((await responsePromise).status()).toBe(200)
+
+    await expect(records).toHaveCount(1)
+    await expect(records).toContainText(guestAnna)
+    await expect(records).toContainText(typeA.name)
+    await expect(records).not.toContainText(guestBoris)
+  })
+
+  await test.step('пустая выдача под фильтрами отличается от отсутствия записей', async () => {
+    await nameInput.fill(`Никого ${suffix}`)
+    await expect(
+      page.getByText('По выбранным фильтрам записей нет.', { exact: true })
+    ).toBeVisible()
+    await expect(page.getByText('Предстоящих записей нет.', { exact: true })).toHaveCount(0)
+  })
+
+  await test.step('сброс очищает все контролы и сразу возвращает полный список', async () => {
+    const responsePromise = page.waitForResponse((response) => bookingsQueryMatches(response.url()))
+    await page.getByRole('button', { name: 'Сбросить фильтры', exact: true }).click()
+    expect((await responsePromise).status()).toBe(200)
+
+    await expect(nameInput).toHaveValue('')
+    await expect(typeSelect).toHaveValue('')
+    await expect(fromDate).toHaveValue('')
+    await expect(toDate).toHaveValue('')
+    await expect(records.filter({ hasText: guestAnna })).toHaveCount(2)
+    await expect(records.filter({ hasText: guestBoris })).toHaveCount(1)
+  })
+
+  await test.step('обновление списка и возврат фокуса сохраняют все фильтры', async () => {
+    await nameInput.fill(guestAnna)
+    await typeSelect.selectOption({ label: typeA.name })
+    await fromDate.fill(annaDate)
+    await toDate.fill(annaDate)
+    await expect(records).toHaveCount(1)
+    await expect(page.getByRole('button', { name: 'Обновить список', exact: true })).toBeEnabled()
+
+    const refreshPromise = page.waitForResponse((response) =>
+      bookingsQueryMatches(response.url(), allFilters)
+    )
+    await page.getByRole('button', { name: 'Обновить список', exact: true }).click()
+    expect((await refreshPromise).status()).toBe(200)
+    await expect(records).toHaveCount(1)
+    await expect(nameInput).toHaveValue(guestAnna)
+    await expect(typeSelect).toHaveValue(typeA.id)
+    await expect(fromDate).toHaveValue(annaDate)
+    await expect(toDate).toHaveValue(annaDate)
+
+    const focusPromise = page.waitForResponse((response) =>
+      bookingsQueryMatches(response.url(), allFilters)
+    )
+    await page.evaluate('window.dispatchEvent(new Event("visibilitychange"))')
+    expect((await focusPromise).status()).toBe(200)
+    await expect(records).toHaveCount(1)
+    await expect(nameInput).toHaveValue(guestAnna)
+    await expect(typeSelect).toHaveValue(typeA.id)
+    await expect(fromDate).toHaveValue(annaDate)
+    await expect(toDate).toHaveValue(annaDate)
   })
 })
