@@ -13,7 +13,7 @@ export async function prepareContractScenario(
   const unknownType = scenario.name === 'unknown-type'
   const needsType =
     (operationId === 'listMeetingTypes' && scenario.name === 'populated') ||
-    (operationId === 'listUpcomingBookings' && scenario.name === 'populated') ||
+    (operationId === 'listUpcomingBookings' && ['populated', 'filtered'].includes(scenario.name)) ||
     (operationId === 'getAvailability' && ['available', 'empty'].includes(scenario.name)) ||
     (operationId === 'createBooking' && !unknownType)
 

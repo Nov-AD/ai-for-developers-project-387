@@ -94,6 +94,11 @@ export type CreateMeetingTypeInput = {
 export type DurationMinutes = number;
 
 /**
+ * Guest name substring filter. Trimmed; case-insensitive; an empty value after trimming disables the filter.
+ */
+export type GuestNameFilter = string;
+
+/**
  * Health check response.
  */
 export type HealthResponse = {
@@ -286,7 +291,24 @@ export type GetAvailabilityResponse = GetAvailabilityResponses[keyof GetAvailabi
 export type ListUpcomingBookingsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Trimmed, case-insensitive guest-name substring; empty disables the filter.
+         */
+        guestName?: GuestNameFilter;
+        /**
+         * Exact meeting type UUID; unknown well-formed UUIDs yield an empty list.
+         */
+        meetingTypeId?: Uuid;
+        /**
+         * Inclusive first owner calendar date of the booking start in Europe/Moscow.
+         */
+        fromDate?: OwnerDate;
+        /**
+         * Inclusive last owner calendar date of the booking start in Europe/Moscow.
+         */
+        toDate?: OwnerDate;
+    };
     url: '/bookings';
 };
 

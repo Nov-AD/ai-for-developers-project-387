@@ -28,7 +28,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Return all types' bookings whose end is strictly later than now, including calls already in progress; exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit time zone. No query parameters. Refresh on owner page entry, focus and manual refresh; no polling required. */
+        /**
+         * @description Return all types' bookings whose end is strictly later than now, including calls already in progress;
+         *     exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending.
+         *     Empty is 200 []. Display in Europe/Moscow with an explicit time zone.
+         *
+         *     Optional filters combine with AND and do not change the base upcoming or sorting rules:
+         *     guestName is a trimmed, case-insensitive guest-name substring (empty disables it);
+         *     meetingTypeId is an exact UUID (a well-formed unknown UUID yields 200 []);
+         *     fromDate and toDate are inclusive owner calendar dates compared with the booking start in
+         *     Europe/Moscow (either boundary may be omitted; fromDate later than toDate is 400).
+         *     Refresh on owner page entry, focus and manual refresh; no polling required.
+         */
         get: operations["listUpcomingBookings"];
         put?: never;
         /**
@@ -177,6 +188,11 @@ export interface components {
          * @example 45
          */
         DurationMinutes: number;
+        /**
+         * @description Guest name substring filter. Trimmed; case-insensitive; an empty value after trimming disables the filter.
+         * @example Анна
+         */
+        GuestNameFilter: string;
         /** @description Health check response. */
         HealthResponse: {
             /**
@@ -412,7 +428,16 @@ export interface operations {
     };
     listUpcomingBookings: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Trimmed, case-insensitive guest-name substring; empty disables the filter. */
+                guestName?: components["schemas"]["GuestNameFilter"];
+                /** @description Exact meeting type UUID; unknown well-formed UUIDs yield an empty list. */
+                meetingTypeId?: components["schemas"]["Uuid"];
+                /** @description Inclusive first owner calendar date of the booking start in Europe/Moscow. */
+                fromDate?: components["schemas"]["OwnerDate"];
+                /** @description Inclusive last owner calendar date of the booking start in Europe/Moscow. */
+                toDate?: components["schemas"]["OwnerDate"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -437,7 +462,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "code": "VALIDATION_ERROR",
-                     *       "message": "Unknown query parameter."
+                     *       "message": "Invalid filter."
                      *     }
                      */
                     "application/json": components["schemas"]["ValidationError"];

@@ -24,7 +24,16 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 export const getAvailability = <ThrowOnError extends boolean = false>(options: Options<GetAvailabilityData, ThrowOnError>): RequestResult<GetAvailabilityResponses, GetAvailabilityErrors, ThrowOnError> => (options.client ?? client).get<GetAvailabilityResponses, GetAvailabilityErrors, ThrowOnError>({ url: '/availability', ...options });
 
 /**
- * Return all types' bookings whose end is strictly later than now, including calls already in progress; exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit time zone. No query parameters. Refresh on owner page entry, focus and manual refresh; no polling required.
+ * Return all types' bookings whose end is strictly later than now, including calls already in progress;
+ * exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending.
+ * Empty is 200 []. Display in Europe/Moscow with an explicit time zone.
+ *
+ * Optional filters combine with AND and do not change the base upcoming or sorting rules:
+ * guestName is a trimmed, case-insensitive guest-name substring (empty disables it);
+ * meetingTypeId is an exact UUID (a well-formed unknown UUID yields 200 []);
+ * fromDate and toDate are inclusive owner calendar dates compared with the booking start in
+ * Europe/Moscow (either boundary may be omitted; fromDate later than toDate is 400).
+ * Refresh on owner page entry, focus and manual refresh; no polling required.
  */
 export const listUpcomingBookings = <ThrowOnError extends boolean = false>(options?: Options<ListUpcomingBookingsData, ThrowOnError>): RequestResult<ListUpcomingBookingsResponses, ListUpcomingBookingsErrors, ThrowOnError> => (options?.client ?? client).get<ListUpcomingBookingsResponses, ListUpcomingBookingsErrors, ThrowOnError>({ url: '/bookings', ...options });
 

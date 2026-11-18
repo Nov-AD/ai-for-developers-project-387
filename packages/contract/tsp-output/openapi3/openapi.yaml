@@ -273,8 +273,46 @@ paths:
             message: This slot has been taken. Please choose another.
     get:
       operationId: listUpcomingBookings
-      description: Return all types' bookings whose end is strictly later than now, including calls already in progress; exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit time zone. No query parameters. Refresh on owner page entry, focus and manual refresh; no polling required.
-      parameters: []
+      description: |-
+        Return all types' bookings whose end is strictly later than now, including calls already in progress;
+        exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending.
+        Empty is 200 []. Display in Europe/Moscow with an explicit time zone.
+
+        Optional filters combine with AND and do not change the base upcoming or sorting rules:
+        guestName is a trimmed, case-insensitive guest-name substring (empty disables it);
+        meetingTypeId is an exact UUID (a well-formed unknown UUID yields 200 []);
+        fromDate and toDate are inclusive owner calendar dates compared with the booking start in
+        Europe/Moscow (either boundary may be omitted; fromDate later than toDate is 400).
+        Refresh on owner page entry, focus and manual refresh; no polling required.
+      parameters:
+        - name: guestName
+          in: query
+          required: false
+          description: Trimmed, case-insensitive guest-name substring; empty disables the filter.
+          schema:
+            $ref: '#/components/schemas/GuestNameFilter'
+          explode: false
+        - name: meetingTypeId
+          in: query
+          required: false
+          description: Exact meeting type UUID; unknown well-formed UUIDs yield an empty list.
+          schema:
+            $ref: '#/components/schemas/Uuid'
+          explode: false
+        - name: fromDate
+          in: query
+          required: false
+          description: Inclusive first owner calendar date of the booking start in Europe/Moscow.
+          schema:
+            $ref: '#/components/schemas/OwnerDate'
+          explode: false
+        - name: toDate
+          in: query
+          required: false
+          description: Inclusive last owner calendar date of the booking start in Europe/Moscow.
+          schema:
+            $ref: '#/components/schemas/OwnerDate'
+          explode: false
       responses:
         '200':
           description: The request has succeeded.
@@ -308,7 +346,7 @@ paths:
                 $ref: '#/components/schemas/ValidationError'
               example:
                 code: VALIDATION_ERROR
-                message: Unknown query parameter.
+                message: Invalid filter.
       tags:
         - Calendar
       x-contract-scenarios:
@@ -327,6 +365,36 @@ paths:
               guestName: Alex
               start: '2026-11-18T06:00:00Z'
               end: '2026-11-18T06:45:00Z'
+        - name: filtered
+          request:
+            query:
+              guestName: example
+              meetingTypeId: 11111111-1111-4111-8111-111111111111
+              fromDate: '2026-11-18'
+              toDate: '2026-11-18'
+          status: 200
+          body:
+            - id: 22222222-2222-4222-8222-222222222222
+              meetingType:
+                id: 11111111-1111-4111-8111-111111111111
+                name: Introduction
+                description: ''
+                durationMinutes: 45
+              guestName: Alex
+              start: '2026-11-18T06:00:00Z'
+              end: '2026-11-18T06:45:00Z'
+        - name: filtered-empty
+          request:
+            query:
+              guestName: Nobody
+          status: 200
+          body: []
+        - name: unknown-type-filter
+          request:
+            query:
+              meetingTypeId: 99999999-9999-4999-8999-999999999999
+          status: 200
+          body: []
         - name: unknown-query
           request:
             query:
@@ -336,6 +404,42 @@ paths:
           body:
             code: VALIDATION_ERROR
             message: 'Unknown query parameter: extra.'
+        - name: invalid-guest-name
+          request:
+            query:
+              guestName: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+          requestValid: false
+          status: 400
+          body:
+            code: VALIDATION_ERROR
+            message: Invalid guest name filter.
+        - name: malformed-type
+          request:
+            query:
+              meetingTypeId: not-a-uuid
+          requestValid: false
+          status: 400
+          body:
+            code: VALIDATION_ERROR
+            message: Invalid meeting type identifier.
+        - name: malformed-from-date
+          request:
+            query:
+              fromDate: '2026-02-30'
+          requestValid: false
+          status: 400
+          body:
+            code: VALIDATION_ERROR
+            message: Invalid from date.
+        - name: reversed-dates
+          request:
+            query:
+              fromDate: '2026-11-19'
+              toDate: '2026-11-18'
+          status: 400
+          body:
+            code: VALIDATION_ERROR
+            message: fromDate must not be later than toDate.
   /health:
     get:
       operationId: getHealth
@@ -612,6 +716,12 @@ components:
       description: Integer duration in minutes; need not be a multiple of the 30-minute start grid.
       examples:
         - 45
+    GuestNameFilter:
+      type: string
+      maxLength: 100
+      description: Guest name substring filter. Trimmed; case-insensitive; an empty value after trimming disables the filter.
+      examples:
+        - Анна
     HealthResponse:
       type: object
       required:

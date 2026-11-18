@@ -51,14 +51,21 @@ const secondBooking: Booking = {
   end: '2026-11-18T09:30:00Z'
 }
 
-function mockOwner(bookings: (attempt: number) => Response | Promise<Response>) {
+function mockOwner(
+  bookings: (attempt: number, search: URLSearchParams) => Response | Promise<Response>,
+  meetingTypes: Booking['meetingType'][] = []
+) {
   let attempt = 0
   const fetch = vi.fn(async (request: Request) => {
     const url = new URL(request.url)
-    if (url.pathname === '/meeting-types') return meetingTypesResponse('empty')
+    if (url.pathname === '/meeting-types') {
+      return meetingTypes.length > 0
+        ? meetingTypesResponse('populated', meetingTypes)
+        : meetingTypesResponse('empty')
+    }
     if (url.pathname === '/bookings') {
       attempt += 1
-      return bookings(attempt)
+      return bookings(attempt, url.searchParams)
     }
     throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
   })
@@ -68,6 +75,10 @@ function mockOwner(bookings: (attempt: number) => Response | Promise<Response>) 
 
 function bookingCalls(fetch: ReturnType<typeof mockOwner>) {
   return fetch.mock.calls.filter(([request]) => new URL(request.url).pathname === '/bookings')
+}
+
+function lastBookingSearch(fetch: ReturnType<typeof mockOwner>) {
+  return new URL(bookingCalls(fetch).at(-1)![0].url).searchParams
 }
 
 describe('Owner upcoming bookings', () => {
@@ -151,5 +162,90 @@ describe('Owner upcoming bookings', () => {
 
     expect(await screen.findByText('Борис')).toBeInTheDocument()
     expect(bookingCalls(fetch).length).toBeGreaterThan(before)
+  })
+})
+
+describe('Owner upcoming booking filters', () => {
+  it('sends guest name, meeting type and date range together, then resets every control', async () => {
+    const fetch = mockOwner(
+      () => upcomingResponse('populated', [firstBooking, secondBooking]),
+      [intro, review]
+    )
+    renderOwner()
+
+    expect(await screen.findByText('Анна')).toBeInTheDocument()
+    const typeSelect = screen.getByLabelText('Тип встречи')
+    expect(
+      within(typeSelect)
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+    ).toEqual(['Все типы', 'Introduction', 'Review'])
+    expect(
+      fetch.mock.calls.filter(([request]) => new URL(request.url).pathname === '/meeting-types')
+    ).toHaveLength(1)
+
+    fireEvent.change(screen.getByLabelText('Имя гостя'), { target: { value: '  анн  ' } })
+    await waitFor(() => expect(lastBookingSearch(fetch).get('guestName')).toBe('анн'))
+
+    fireEvent.change(typeSelect, { target: { value: review.id } })
+    await waitFor(() => expect(lastBookingSearch(fetch).get('meetingTypeId')).toBe(review.id))
+
+    fireEvent.change(screen.getByLabelText('Дата с'), { target: { value: '2026-11-18' } })
+    await waitFor(() => expect(lastBookingSearch(fetch).get('fromDate')).toBe('2026-11-18'))
+
+    fireEvent.change(screen.getByLabelText('Дата по'), { target: { value: '2026-11-19' } })
+    await waitFor(() => expect(lastBookingSearch(fetch).get('toDate')).toBe('2026-11-19'))
+
+    expect(Object.fromEntries(lastBookingSearch(fetch))).toEqual({
+      guestName: 'анн',
+      meetingTypeId: review.id,
+      fromDate: '2026-11-18',
+      toDate: '2026-11-19'
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Сбросить фильтры' }))
+
+    await waitFor(() => expect(lastBookingSearch(fetch).toString()).toBe(''))
+    expect(screen.getByLabelText('Имя гостя')).toHaveValue('')
+    expect(typeSelect).toHaveValue('')
+    expect(screen.getByLabelText('Дата с')).toHaveValue('')
+    expect(screen.getByLabelText('Дата по')).toHaveValue('')
+  })
+
+  it('distinguishes no bookings at all from no matches for active filters', async () => {
+    mockOwner(() => upcomingResponse('empty'))
+    renderOwner()
+
+    expect(await screen.findByText('Предстоящих записей нет.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Имя гостя'), { target: { value: 'Никто' } })
+
+    expect(await screen.findByText('По выбранным фильтрам записей нет.')).toBeInTheDocument()
+    expect(screen.queryByText('Предстоящих записей нет.')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Сбросить фильтры' }))
+
+    expect(await screen.findByText('Предстоящих записей нет.')).toBeInTheDocument()
+    expect(screen.queryByText('По выбранным фильтрам записей нет.')).not.toBeInTheDocument()
+  })
+
+  it('keeps filters on manual refresh and on window focus refresh', async () => {
+    const fetch = mockOwner(() => upcomingResponse('populated', [firstBooking]))
+    renderOwner()
+
+    await screen.findByText('Анна')
+    fireEvent.change(screen.getByLabelText('Имя гостя'), { target: { value: 'Анна' } })
+    await waitFor(() => expect(lastBookingSearch(fetch).get('guestName')).toBe('Анна'))
+
+    const beforeRefresh = bookingCalls(fetch).length
+    fireEvent.click(screen.getByRole('button', { name: 'Обновить список' }))
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(beforeRefresh))
+    expect(lastBookingSearch(fetch).get('guestName')).toBe('Анна')
+
+    const beforeFocus = bookingCalls(fetch).length
+    window.dispatchEvent(new Event('visibilitychange'))
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(beforeFocus))
+    expect(lastBookingSearch(fetch).get('guestName')).toBe('Анна')
+    expect(screen.getByLabelText('Имя гостя')).toHaveValue('Анна')
   })
 })

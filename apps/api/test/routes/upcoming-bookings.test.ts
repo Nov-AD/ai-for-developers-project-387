@@ -50,8 +50,8 @@ async function book(
   }>()
 }
 
-async function upcoming(instance: FastifyInstance) {
-  return instance.inject({ method: 'GET', url: '/bookings' })
+async function upcoming(instance: FastifyInstance, query = '') {
+  return instance.inject({ method: 'GET', url: `/bookings${query}` })
 }
 
 /** Tuesday 12:00 in Europe/Moscow; the window starts tomorrow (2026-11-18). */
@@ -167,5 +167,112 @@ describe('GET /bookings', () => {
     expect((await upcoming(first)).json()).toHaveLength(1)
     expect((await upcoming(second)).json()).toEqual([])
     expect(await createType(second, 'Второй', 15)).not.toBe(secondType)
+  })
+
+  it('filters by a trimmed, case-insensitive guest name substring', async () => {
+    freeze()
+    const instance = await build()
+    const id = await createType(instance, 'Звонок', 30)
+    const anna = await book(instance, id, '2026-11-18T06:00:00Z', 'Анна')
+    await book(instance, id, '2026-11-18T07:00:00Z', 'Борис')
+
+    const substring = await upcoming(instance, `?guestName=${encodeURIComponent('анн')}`)
+    expect(substring.statusCode).toBe(200)
+    expect(substring.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([anna.id])
+    assertContractResponse(listOperation, substring.statusCode, substring.json())
+
+    const trimmed = await upcoming(instance, `?guestName=${encodeURIComponent('  Анна  ')}`)
+    expect(trimmed.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([anna.id])
+
+    expect((await upcoming(instance, '?guestName=%20%20')).json()).toHaveLength(2)
+  })
+
+  it('filters by exact meeting type and treats an unknown well-formed UUID as empty', async () => {
+    freeze()
+    const instance = await build()
+    const short = await createType(instance, 'Короткий', 30)
+    const long = await createType(instance, 'Длинный', 45)
+    await book(instance, short, '2026-11-18T06:00:00Z', 'Анна')
+    const boris = await book(instance, long, '2026-11-18T08:00:00Z', 'Борис')
+
+    const filtered = await upcoming(instance, `?meetingTypeId=${long}`)
+    expect(filtered.statusCode).toBe(200)
+    expect(filtered.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([boris.id])
+    assertContractResponse(listOperation, filtered.statusCode, filtered.json())
+
+    const unknown = await upcoming(instance, '?meetingTypeId=99999999-9999-4999-8999-999999999999')
+    expect(unknown.statusCode).toBe(200)
+    expect(unknown.json()).toEqual([])
+  })
+
+  it('filters by inclusive owner calendar dates on the booking start', async () => {
+    freeze()
+    const instance = await build()
+    const id = await createType(instance, 'Звонок', 30)
+    const firstDay = await book(instance, id, '2026-11-18T06:00:00Z', 'Анна')
+    const sameDay = await book(instance, id, '2026-11-18T08:00:00Z', 'Борис')
+    const nextDay = await book(instance, id, '2026-11-19T06:00:00Z', 'Вера')
+
+    const exact = await upcoming(instance, '?fromDate=2026-11-18&toDate=2026-11-18')
+    expect(exact.statusCode).toBe(200)
+    expect(exact.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([
+      firstDay.id,
+      sameDay.id
+    ])
+    assertContractResponse(listOperation, exact.statusCode, exact.json())
+
+    const fromOnly = await upcoming(instance, '?fromDate=2026-11-19')
+    expect(fromOnly.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([
+      nextDay.id
+    ])
+
+    const toOnly = await upcoming(instance, '?toDate=2026-11-18')
+    expect(toOnly.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([
+      firstDay.id,
+      sameDay.id
+    ])
+
+    const inclusive = await upcoming(instance, '?fromDate=2026-11-18&toDate=2026-11-19')
+    expect(inclusive.json()).toHaveLength(3)
+  })
+
+  it('combines every filter with AND and preserves start/UUID ordering', async () => {
+    freeze()
+    const instance = await build()
+    const short = await createType(instance, 'Короткий', 30)
+    const long = await createType(instance, 'Длинный', 45)
+    const first = await book(instance, short, '2026-11-18T06:00:00Z', 'Анна')
+    await book(instance, long, '2026-11-18T08:00:00Z', 'Анна')
+    await book(instance, short, '2026-11-19T06:00:00Z', 'Анна')
+    await book(instance, short, '2026-11-18T07:00:00Z', 'Борис')
+    const later = await book(instance, short, '2026-11-18T09:00:00Z', 'Анна')
+
+    const response = await upcoming(
+      instance,
+      `?guestName=${encodeURIComponent('Анна')}&meetingTypeId=${short}&fromDate=2026-11-18&toDate=2026-11-18`
+    )
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([
+      first.id,
+      later.id
+    ])
+    assertContractResponse(listOperation, response.statusCode, response.json())
+  })
+
+  it.each([
+    ['guest name longer than 100 characters', `?guestName=${'x'.repeat(101)}`],
+    ['malformed meeting type UUID', '?meetingTypeId=not-a-uuid'],
+    ['malformed date', '?fromDate=2026-02-30'],
+    ['fromDate later than toDate', '?fromDate=2026-11-19&toDate=2026-11-18']
+  ])('rejects %s with a validation error', async (_label, query) => {
+    freeze()
+    const instance = await build()
+
+    const response = await upcoming(instance, query)
+
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toMatchObject({ code: 'VALIDATION_ERROR' })
+    assertContractResponse(listOperation, response.statusCode, response.json())
   })
 })

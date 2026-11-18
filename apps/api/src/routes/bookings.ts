@@ -57,6 +57,18 @@ const createInput = z.strictObject({
   guestName: z.string().trim().min(1).max(100)
 }) satisfies z.ZodType<components['schemas']['CreateBookingInput']>
 
+const upcomingQuery = z
+  .strictObject({
+    guestName: z.string().trim().max(100).optional(),
+    meetingTypeId: z.uuid().optional(),
+    fromDate: z.iso.date().optional(),
+    toDate: z.iso.date().optional()
+  })
+  .refine(({ fromDate, toDate }) => !fromDate || !toDate || fromDate <= toDate, {
+    path: ['fromDate'],
+    message: 'Must not be later than toDate.'
+  })
+
 const bookingRoutes: FastifyPluginAsyncZod = async (fastify): Promise<void> => {
   fastify.post(
     '/bookings',
@@ -127,22 +139,28 @@ const bookingRoutes: FastifyPluginAsyncZod = async (fastify): Promise<void> => {
     '/bookings',
     {
       schema: {
-        querystring: z.strictObject({}),
+        querystring: upcomingQuery,
         response: { 200: z.array(booking), 400: validationError }
       },
       errorHandler: (error, _request, reply) => {
         if (error.validation) {
           return reply.code(400).send({
             code: 'VALIDATION_ERROR',
-            message: 'Неизвестный параметр запроса.'
+            message: 'Проверьте параметры фильтра.'
           })
         }
         throw error
       }
     },
-    async () => {
+    async (request) => {
+      const { guestName, meetingTypeId, fromDate, toDate } = request.query
       // Recomputed per request: the window advances and finished calls disappear.
-      return fastify.bookings.upcoming(new Date())
+      return fastify.bookings.upcoming(new Date(), {
+        ...(guestName ? { guestName } : {}),
+        ...(meetingTypeId ? { meetingTypeId } : {}),
+        ...(fromDate ? { fromDate } : {}),
+        ...(toDate ? { toDate } : {})
+      })
     }
   )
 }

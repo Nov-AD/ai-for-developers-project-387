@@ -8,6 +8,11 @@ import * as z from 'zod';
 export const zDurationMinutes = z.int().gte(1).lte(540);
 
 /**
+ * Guest name substring filter. Trimmed; case-insensitive; an empty value after trimming disables the filter.
+ */
+export const zGuestNameFilter = z.string().max(100);
+
+/**
  * Health check response.
  */
 export const zHealthResponse = z.object({
@@ -145,6 +150,13 @@ export const zGetAvailabilityQuery = z.object({
  * The request has succeeded.
  */
 export const zGetAvailabilityResponse = zAvailability;
+
+export const zListUpcomingBookingsQuery = z.object({
+    guestName: zGuestNameFilter.optional(),
+    meetingTypeId: zUuid.optional(),
+    fromDate: zOwnerDate.optional(),
+    toDate: zOwnerDate.optional()
+});
 
 /**
  * The request has succeeded.

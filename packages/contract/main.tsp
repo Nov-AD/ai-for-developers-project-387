@@ -327,16 +327,54 @@ refresh availability. There is no idempotency key or booking lookup/confirmation
 ])
 op createBooking(@doc("Selected meeting type/start and guest name; no server-owned fields.") @body body: CreateBookingInput): Created<Booking> | BadRequest<ValidationError | InvalidSlotError> | NotFound | Conflict;
 
-@doc("Return all types' bookings whose end is strictly later than now, including calls already in progress; exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit time zone. No query parameters. Refresh on owner page entry, focus and manual refresh; no polling required.")
+@doc("Guest name substring filter. Trimmed; case-insensitive; an empty value after trimming disables the filter.")
+@maxLength(100)
+@example("Анна")
+scalar GuestNameFilter extends string;
+
+@doc("""
+Return all types' bookings whose end is strictly later than now, including calls already in progress;
+exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending.
+Empty is 200 []. Display in Europe/Moscow with an explicit time zone.
+
+Optional filters combine with AND and do not change the base upcoming or sorting rules:
+guestName is a trimmed, case-insensitive guest-name substring (empty disables it);
+meetingTypeId is an exact UUID (a well-formed unknown UUID yields 200 []);
+fromDate and toDate are inclusive owner calendar dates compared with the booking start in
+Europe/Moscow (either boundary may be omitted; fromDate later than toDate is 400).
+Refresh on owner page entry, focus and manual refresh; no polling required.
+""")
 @route("/bookings")
 @get
 @opExample(#{returnType: #[]}, #{title: "Empty list"})
 @opExample(#{returnType: #[exampleBooking]}, #{title: "Upcoming and ongoing calls"})
-@opExample(#{returnType: #{statusCode: 400, body: #{code: "VALIDATION_ERROR", message: "Unknown query parameter."}}})
+@opExample(#{returnType: #{statusCode: 400, body: #{code: "VALIDATION_ERROR", message: "Invalid filter."}}})
 @extension("x-contract-scenarios", #[
   #{name: "empty", status: 200, body: #[]},
   #{name: "populated", status: 200, body: #[exampleBooking]},
+  #{name: "filtered", request: #{query: #{guestName: "example", meetingTypeId: exampleTypeId,
+    fromDate: "2026-11-18", toDate: "2026-11-18"}}, status: 200, body: #[exampleBooking]},
+  #{name: "filtered-empty", request: #{query: #{guestName: "Nobody"}}, status: 200, body: #[]},
+  #{name: "unknown-type-filter", request: #{query: #{meetingTypeId: "99999999-9999-4999-8999-999999999999"}},
+    status: 200, body: #[]},
   #{name: "unknown-query", request: #{query: #{extra: "x"}}, requestValid: false,
-    status: 400, body: #{code: "VALIDATION_ERROR", message: "Unknown query parameter: extra."}}
+    status: 400, body: #{code: "VALIDATION_ERROR", message: "Unknown query parameter: extra."}},
+  #{name: "invalid-guest-name", request: #{query: #{guestName: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+    requestValid: false, status: 400, body: #{code: "VALIDATION_ERROR", message: "Invalid guest name filter."}},
+  #{name: "malformed-type", request: #{query: #{meetingTypeId: "not-a-uuid"}}, requestValid: false,
+    status: 400, body: #{code: "VALIDATION_ERROR", message: "Invalid meeting type identifier."}},
+  #{name: "malformed-from-date", request: #{query: #{fromDate: "2026-02-30"}}, requestValid: false,
+    status: 400, body: #{code: "VALIDATION_ERROR", message: "Invalid from date."}},
+  #{name: "reversed-dates", request: #{query: #{fromDate: "2026-11-19", toDate: "2026-11-18"}},
+    status: 400, body: #{code: "VALIDATION_ERROR", message: "fromDate must not be later than toDate."}}
 ])
-op listUpcomingBookings(): Booking[] | BadRequest;
+op listUpcomingBookings(
+  @doc("Trimmed, case-insensitive guest-name substring; empty disables the filter.")
+  @query guestName?: GuestNameFilter,
+  @doc("Exact meeting type UUID; unknown well-formed UUIDs yield an empty list.")
+  @query meetingTypeId?: Uuid,
+  @doc("Inclusive first owner calendar date of the booking start in Europe/Moscow.")
+  @query fromDate?: OwnerDate,
+  @doc("Inclusive last owner calendar date of the booking start in Europe/Moscow.")
+  @query toDate?: OwnerDate
+): Booking[] | BadRequest;
