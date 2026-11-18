@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { modelEnvironment } from './auto-triage.mjs'
 
-const model = 'opencode/mimo-v2.6-flash-free'
+const model = 'opencode/deepseek-v4.1-flash-free'
 const marker = (key) => `<!-- opencode:dependency-audit:v1:${key} -->`
 const lockfiles = [
   'pnpm-lock.yaml',
