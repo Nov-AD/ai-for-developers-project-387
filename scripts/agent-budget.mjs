@@ -3,7 +3,7 @@ import { appendFileSync, readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { githubClient } from './auto-triage.mjs'
 
-export const attemptLimit = 3
+export const attemptLimit = 5
 const workflows = ['opencode.yml', 'pr-review.yml']
 const trusted = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
 
@@ -110,7 +110,7 @@ export function renderAgentResult({ reason, sha, url, requests }) {
     `**${reason === 'success' ? 'Завершено; решение за человеком' : 'Нужен человек'}**`,
     '',
     `Причина: \`${reason}\`. Последний head SHA: \`${sha}\`.`,
-    `Общий бюджет PR: ${attemptLimit} попытки; записей попыток в истории: ${count ?? 'не определено'}.`,
+    `Общий бюджет PR: ${attemptLimit} попыток; записей попыток в истории: ${count ?? 'не определено'}.`,
     `[Логи запуска](${url}).`,
     '',
     reason === 'limit_exhausted'
