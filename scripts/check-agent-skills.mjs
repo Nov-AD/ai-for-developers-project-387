@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-const skills = ['to-spec', 'to-tickets', 'implement-spec', 'tdd', 'code-review', 'codebase-design']
+const skills = [
+  'to-spec',
+  'to-tickets',
+  'implement-spec',
+  'triage',
+  'grilling',
+  'domain-modeling',
+  'tdd',
+  'code-review',
+  'codebase-design'
+]
 const root = new URL('../', import.meta.url)
 
 for (const skill of skills) {
@@ -19,6 +29,10 @@ for (const skill of skills) {
 }
 
 for (const path of [
+  '.opencode/skills/triage/AGENT-BRIEF.md',
+  '.opencode/skills/triage/OUT-OF-SCOPE.md',
+  '.opencode/skills/domain-modeling/GLOSSARY-FORMAT.md',
+  '.opencode/skills/domain-modeling/ADR-FORMAT.md',
   '.opencode/skills/tdd/tests.md',
   '.opencode/skills/tdd/mocking.md',
   '.opencode/skills/codebase-design/DEEPENING.md',
