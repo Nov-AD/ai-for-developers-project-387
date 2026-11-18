@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.2](https://github.com/Nov-AD/ai-for-developers-project-387/compare/v0.3.1...v0.3.2) (2026-11-18)
+
+
+### Bug Fixes
+
+* allow five PR agent attempts ([#25](https://github.com/Nov-AD/ai-for-developers-project-387/issues/25)) ([0219219](https://github.com/Nov-AD/ai-for-developers-project-387/commit/02192196f58271c6e515110c0b6c779bf37eb8ba))
+* attach bounded full PR review context ([#27](https://github.com/Nov-AD/ai-for-developers-project-387/issues/27)) ([5eff8f8](https://github.com/Nov-AD/ai-for-developers-project-387/commit/5eff8f82bafe9f977fada534d23593abf7606e95))
+* передавать полный ограниченный контекст авторевью ([#27](https://github.com/Nov-AD/ai-for-developers-project-387/issues/27)) ([51e8e38](https://github.com/Nov-AD/ai-for-developers-project-387/commit/51e8e3890858b80b6b1bf788a83b117df61fe7ab))
+* пять попыток агента на PR ([#25](https://github.com/Nov-AD/ai-for-developers-project-387/issues/25)) ([ad6b494](https://github.com/Nov-AD/ai-for-developers-project-387/commit/ad6b494eac146c336975dab1b705c71600cac9af))
+
 ## [0.3.1](https://github.com/Nov-AD/ai-for-developers-project-387/compare/v0.3.0...v0.3.1) (2026-11-18)
 
 
