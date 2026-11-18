@@ -1,0 +1,72 @@
+name: PR head verification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-head-e2e-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  head-e2e:
+    name: PR head E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact author version
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Record actual SHA before running PR code
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/head-e2e"
+          actual_sha="$(git rev-parse HEAD)"
+          printf '%s\n' "$actual_sha" | tee "$RUNNER_TEMP/head-e2e/sha.txt"
+          test "$actual_sha" = "$EXPECTED_SHA"
+          printf 'PR: %s\nSHA: %s\nRun: %s\nCommand: mise run test:e2e\n' \
+            "$PR_NUMBER" "$actual_sha" "$RUN_URL" > "$RUNNER_TEMP/head-e2e/result.txt"
+
+      - name: Set up isolated project tools
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        with:
+          version: 2026.11.9
+
+      - name: Build and exercise real application
+        id: e2e
+        env:
+          PLAYWRIGHT_TRACE: "on"
+        run: |
+          set -o pipefail
+          mise run test:e2e 2>&1 | tee "$RUNNER_TEMP/head-e2e/e2e.log"
+          trace="$(find apps/web/test-results -name trace.zip -print -quit)"
+          test -n "$trace"
+          printf 'Trace: %s\n' "$trace" >> "$RUNNER_TEMP/head-e2e/result.txt"
+
+      - name: Record outcome
+        if: always()
+        env:
+          E2E_OUTCOME: ${{ steps.e2e.outcome }}
+        run: |
+          printf 'Outcome: %s\n' "$E2E_OUTCOME" >> "$RUNNER_TEMP/head-e2e/result.txt"
+          cat "$RUNNER_TEMP/head-e2e/result.txt" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve SHA, result and successful traces
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr-${{ github.event.pull_request.number }}-head-${{ github.event.pull_request.head.sha }}-attempt-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/head-e2e/
+            apps/web/test-results/
+          if-no-files-found: error
+          retention-days: 14
