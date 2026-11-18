@@ -15,7 +15,7 @@ import { githubClient, modelEnvironment } from './auto-triage.mjs'
 import { inspectBudget, renderAgentResult } from './agent-budget.mjs'
 import { agentFailureReason } from './run-manual-agent.mjs'
 import { compactReviewContext, reviewContextParts } from './review-context.mjs'
-import { writeReviewDiagnostics } from './review-diagnostics.mjs'
+import { writeReviewDiagnostics, writeReviewMetrics } from './review-diagnostics.mjs'
 
 const trusted = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
 const actions = new Set(['opened', 'synchronize', 'reopened', 'ready_for_review'])
@@ -257,7 +257,7 @@ export function reviewFromEvents(output, files) {
 
 export function validateReviewPolicy(agents) {
   const agent = agents.find((entry) => entry.id === 'pr-review')
-  assert.ok(agent?.mode === 'primary' && agent.steps === 16, 'missing or unbounded review agent')
+  assert.ok(agent?.mode === 'primary' && agent.steps === 24, 'missing or unbounded review agent')
   const boundary = agent.permissions.findLastIndex(
     (rule) => rule.action === '*' && rule.resource === '*' && rule.effect === 'deny'
   )
@@ -377,6 +377,10 @@ async function main() {
     assert.equal(process.env.REVIEW_CRITERIA, 'REVIEW.md', 'trusted REVIEW.md must be supplied')
     const criteria = readFileSync('REVIEW.md', 'utf8')
     const result = runReview(executable, options, input, criteria)
+    const recordMetrics = (outcome) => {
+      const metrics = writeReviewMetrics(join(temp, 'review-metrics.json'), result, outcome)
+      console.log(`Review metrics: ${JSON.stringify(metrics)}`)
+    }
     const reason = agentFailureReason(
       result.error?.code === 'ETIMEDOUT',
       result.error,
@@ -385,6 +389,7 @@ async function main() {
     )
     output('reason', reason === 'success' ? 'agent_failed' : reason)
     if (reason !== 'success') {
+      recordMetrics(reason)
       writeReviewDiagnostics(join(temp, 'review-diagnostics.json'), result, reason)
       throw new Error('OpenCode failed or timed out; no fallback model will be used')
     }
@@ -393,9 +398,11 @@ async function main() {
       review = reviewFromEvents(result.stdout, input.files)
     } catch (error) {
       output('review_failure', error.code)
+      recordMetrics(error.code)
       writeReviewDiagnostics(join(temp, 'review-diagnostics.json'), result, error.code)
       throw error
     }
+    recordMetrics('success')
     output('proposal', JSON.stringify(review))
     output('reason', 'success')
     return

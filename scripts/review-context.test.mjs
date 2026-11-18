@@ -49,7 +49,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 const args = process.argv.slice(2)
 if (args[0] === 'debug') {
   console.log(JSON.stringify([{
-    id: 'pr-review', mode: 'primary', steps: 16,
+    id: 'pr-review', mode: 'primary', steps: 24,
     permissions: [{action: '*', resource: '*', effect: 'deny'},
                   {action: 'read', resource: '*', effect: 'allow'}]
   }]))
@@ -57,6 +57,7 @@ if (args[0] === 'debug') {
   const paths = args.flatMap((arg, index) => arg === '--file' ? [args[index + 1]] : [])
   const files = paths.map(path => readFileSync(path, 'utf8'))
   writeFileSync(${JSON.stringify(capture)}, JSON.stringify({args, paths, files, token: process.env.GH_TOKEN}))
+  console.log(JSON.stringify({type: 'step_start'}))
   console.log(JSON.stringify({type: 'text', part: {text: JSON.stringify({summary: 'Проверено.', findings: []})}}))
   console.log(JSON.stringify({type: 'step_finish', part: {reason: 'stop'}}))
 }
@@ -86,6 +87,21 @@ if (args[0] === 'debug') {
     assert.ok(captured.paths.every((path) => !existsSync(path)))
     assert.match(readFileSync(output, 'utf8'), /reason=success/u)
     assert.ok(!existsSync(join(temp, 'review-diagnostics.json')))
+    const metrics = JSON.parse(readFileSync(join(temp, 'review-metrics.json'), 'utf8'))
+    assert.deepEqual(metrics, {
+      outcome: 'success',
+      exitCode: 0,
+      signal: null,
+      stepsStarted: 1,
+      stepsFinished: 1,
+      finishReason: 'stop',
+      malformedLines: 0
+    })
+    assert.match(result.stdout, /Review metrics: /u)
+    assert.doesNotMatch(
+      JSON.stringify(metrics),
+      /Проверено|Полное обсуждение|must-not-reach-model/u
+    )
   } finally {
     rmSync(temp, { recursive: true, force: true })
   }

@@ -1,7 +1,7 @@
 ---
 description: Unattended read-only PR review; returns findings for a separate comment publisher.
 mode: primary
-steps: 16
+steps: 24
 permissions:
   - action: "*"
     resource: "*"
@@ -49,6 +49,31 @@ Include unavailable specification/approval links and scope gaps in the summary.
 Evaluate the author's risk justification by consequences, affected users and
 matching test depth, not diff size. Each finding states the failure conditions
 and consequence. Leave formatting to the linter.
+
+## Research budget
+
+Use at most 20 model steps for research within the 24-step total; reserve the
+remaining four steps for finalization. Finish earlier when the supplied evidence
+is sufficient. First inspect all supplied patches, linked approvals and prior
+decisions. Read surrounding code only to resolve a concrete correctness question
+or verify a candidate finding; stop that investigation once the evidence answers it.
+At the research boundary, finalize with the evidence already collected and name
+unchecked areas in `summary`.
+
+## Finalization
+
+The final response is exactly the JSON object below, including when the runtime
+removes tools, requests a summary, or reports a step/time/context limit. In those
+cases, summarize the completed review inside `summary`, explicitly identify the
+unreviewed scope and need for human review, and include only evidenced findings.
+An empty `findings` array means no confirmed defects in the reviewed portion,
+not that unchecked code is correct. Complete the JSON with available evidence
+instead of requesting another tool call.
+
+Emit the JSON directly: the first non-whitespace character is `{` and the last
+is `}`. Keep progress reports, Markdown fences, tool-call markup and explanations
+outside the JSON out of the final response. Put any material limitation in
+`summary` as a plain single-line string.
 
 Return only one JSON object with exactly:
 

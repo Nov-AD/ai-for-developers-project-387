@@ -522,7 +522,7 @@ test('effective runtime policy denies writes, shell, subagents, skills and MCP',
   const agent = {
     id: 'pr-review',
     mode: 'primary',
-    steps: 16,
+    steps: 24,
     permissions: [
       { action: '*', resource: '*', effect: 'allow' },
       { action: '*', resource: '*', effect: 'deny' },
@@ -532,6 +532,9 @@ test('effective runtime policy denies writes, shell, subagents, skills and MCP',
   validateReviewPolicy([agent])
   assert.throws(() => validateReviewPolicy([]))
   assert.throws(() => validateReviewPolicy([{ ...agent, steps: undefined }]))
+  for (const steps of [16, 23, 25]) {
+    assert.throws(() => validateReviewPolicy([{ ...agent, steps }]))
+  }
   assert.throws(() => validateReviewPolicy([{ ...agent, permissions: [] }]))
   for (const action of [
     'edit',
@@ -551,6 +554,19 @@ test('effective runtime policy denies writes, shell, subagents, skills and MCP',
       ])
     )
   }
+})
+
+test('review agent bounds research and keeps JSON finalization when runtime requests a summary', () => {
+  const agent = readFileSync(new URL('../.opencode/agents/pr-review.md', import.meta.url), 'utf8')
+  assert.match(agent, /^steps: 24$/mu)
+  assert.match(agent, /at most 20 model steps for research/u)
+  assert.match(agent, /reserve the\nremaining four steps for finalization/u)
+  assert.match(
+    agent,
+    /runtime\nremoves tools, requests a summary, or reports a step\/time\/context limit/u
+  )
+  assert.match(agent, /unreviewed scope and need for human review/u)
+  assert.match(agent, /first non-whitespace character is `\{` and the last\nis `\}`/u)
 })
 
 test('workflow separates review from write token, uses CLI not github run, never checks out PR head', () => {
@@ -594,5 +610,12 @@ test('workflow separates review from write token, uses CLI not github run, never
   assert.match(analysis, /actions\/upload-artifact@[a-f0-9]{40}/u)
   assert.match(analysis, /path: \$\{\{ runner\.temp \}\}\/review-diagnostics\.json/u)
   assert.match(analysis, /retention-days: 7/u)
+  assert.match(
+    analysis,
+    /if: always\(\) && \(steps\.analysis\.outcome == 'success' \|\| steps\.analysis\.outcome == 'failure'\)/u
+  )
+  assert.match(analysis, /-review-metrics-/u)
+  assert.match(analysis, /path: \$\{\{ runner\.temp \}\}\/review-metrics\.json/u)
+  assert.match(analysis, /retention-days: 30/u)
   assert.match(publication, /REVIEW_FAILURE: \$\{\{ needs\.analyze\.outputs\.review_failure \}\}/u)
 })
