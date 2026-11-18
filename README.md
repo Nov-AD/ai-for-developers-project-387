@@ -152,7 +152,7 @@ Workflow `.github/workflows/ci.yml` вызывает ту же `mise run check` 
 ### Аудит зависимостей с агентом
 
 [`.github/workflows/security.yml`](.github/workflows/security.yml) объединяет
-`schedule` (`0 6 * * 1`, понедельник, 06:00 UTC, раз в неделю) и
+`schedule` (`0 3 * * *`, каждый день, 03:00 UTC) и
 `workflow_dispatch`. Аудит разрешён только из основной ветки; расписание GitHub
 также использует только её. Тайм-аут аудита — 20 минут, отдельного сканирования
 секретов — 15 минут. Общая группа `concurrency: security` не допускает
@@ -162,7 +162,7 @@ Workflow `.github/workflows/ci.yml` вызывает ту же `mise run check` 
    используется `pnpm run audit`, а не встроенная команда `pnpm audit`.
    Находки — входные данные агента, а ошибка сканера останавливает процесс.
 2. Закреплённый CLI OpenCode V2 использует бесплатную модель
-   `opencode/mimo-v2.6-flash-free` без нового Secret и без платного fallback.
+   `opencode/deepseek-v4.1-flash-free` без нового Secret и без платного fallback.
    Prompt и политика — [агент dependency-audit](.opencode/agents/dependency-audit.md).
    Он объясняет риски и предлагает следующий шаг; у него нет инструментов,
    GitHub-токена или разрешения менять зависимости. Эффективную политику
