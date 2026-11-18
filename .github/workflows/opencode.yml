@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      issues: read
+      issues: write
       pull-requests: read
       id-token: write
     steps:
@@ -78,6 +78,17 @@ jobs:
         if: steps.discussion.outputs.allowed == 'true'
         # github-v1.2.25; @latest is stale, see anomalyco/opencode#19865.
         uses: anomalyco/opencode/github@a3b97d9090ccf4aa9ac32268486283e3131e36b4
+        env:
+          # App authentication stays in the Action; shell gh needs its own token.
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GH_PROMPT_DISABLED: "1"
+          # There is no interactive client to answer filesystem approval requests.
+          OPENCODE_CONFIG_CONTENT: >-
+            {"$schema":"https://opencode.ai/config.json","permissions":[
+            {"action":"external_directory","resource":"*","effect":"deny"},
+            {"action":"read","resource":"*.env","effect":"deny"},
+            {"action":"read","resource":"*.env.*","effect":"deny"}]}
         with:
           model: opencode/deepseek-v4.1-flash-free
           mentions: /opencode,/oc
