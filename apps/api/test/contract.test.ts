@@ -134,12 +134,18 @@ describe('API contract', () => {
           'trimmed-filter',
           'empty-filter',
           'filtered-by-type',
-          'filtered-by-type-and-name'
+          'filtered-by-type-and-name',
+          'filtered-from-date',
+          'filtered-to-date',
+          'filtered-date-range',
+          'filtered-by-date-and-name',
+          'filtered-by-all-filters'
         ].includes(scenario.name)
       ) {
         expect(body).toHaveLength(1)
       }
-      if (scenario.name === 'filtered-empty') expect(body).toEqual([])
+      if (['filtered-empty', 'filtered-date-empty'].includes(scenario.name))
+        expect(body).toEqual([])
       if (scenario.name === 'available') {
         expect((body as { slots: unknown[] }).slots.length).toBeGreaterThan(0)
       }

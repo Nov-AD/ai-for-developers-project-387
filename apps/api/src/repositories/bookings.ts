@@ -1,4 +1,5 @@
 import type { components } from '../generated/openapi.js'
+import { ownerDate } from '../schedule.ts'
 
 export type Booking = components['schemas']['Booking']
 type MeetingType = components['schemas']['MeetingType']
@@ -17,6 +18,10 @@ export type BookingFilters = {
   guestName?: string
   /** Meeting type identifier; a value that matches no booking yields an empty list. */
   meetingTypeId?: string
+  /** Inclusive lower bound for the start's Europe/Moscow calendar date. */
+  fromDate?: string
+  /** Inclusive upper bound for the start's Europe/Moscow calendar date. */
+  toDate?: string
 }
 
 export interface BookingRepository {
@@ -41,10 +46,16 @@ export class MemoryBookingRepository implements BookingRepository {
     const time = now.getTime()
     const guestName = filters.guestName?.trim().toLowerCase()
     const meetingTypeId = filters.meetingTypeId
+    const fromDate = filters.fromDate
+    const toDate = filters.toDate
     return this.list()
       .filter((booking) => Date.parse(booking.end) > time)
       .filter((booking) => !guestName || booking.guestName.toLowerCase().includes(guestName))
       .filter((booking) => !meetingTypeId || booking.meetingType.id === meetingTypeId)
+      .filter((booking) => {
+        const date = ownerDate(booking.start)
+        return (!fromDate || date >= fromDate) && (!toDate || date <= toDate)
+      })
       .sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id))
   }
 

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { type FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import type { components, operations } from '../generated/openapi.js'
 import { addMinutes } from 'date-fns'
-import { isBookableStart, ownerWindow, utcInstant } from '../schedule.ts'
+import { isBookableStart, isOwnerDate, ownerWindow, utcInstant } from '../schedule.ts'
 
 const instant = z
   .string()
@@ -57,10 +57,19 @@ const createInput = z.strictObject({
   guestName: z.string().trim().min(1).max(100)
 }) satisfies z.ZodType<components['schemas']['CreateBookingInput']>
 
-const upcomingFilters = z.strictObject({
-  guestName: z.string().trim().max(100).optional(),
-  meetingTypeId: z.uuid().optional()
-}) satisfies z.ZodType<NonNullable<operations['listUpcomingBookings']['parameters']['query']>>
+const ownerDateFilter = z.string().refine(isOwnerDate)
+
+const upcomingFilters = z
+  .strictObject({
+    guestName: z.string().trim().max(100).optional(),
+    meetingTypeId: z.uuid().optional(),
+    fromDate: ownerDateFilter.optional(),
+    toDate: ownerDateFilter.optional()
+  })
+  .refine(
+    ({ fromDate, toDate }) => !fromDate || !toDate || fromDate <= toDate,
+    'fromDate must not be later than toDate'
+  ) satisfies z.ZodType<NonNullable<operations['listUpcomingBookings']['parameters']['query']>>
 
 const bookingRoutes: FastifyPluginAsyncZod = async (fastify): Promise<void> => {
   fastify.post(
@@ -147,11 +156,12 @@ const bookingRoutes: FastifyPluginAsyncZod = async (fastify): Promise<void> => {
     },
     async (request) => {
       // Recomputed per request: the window advances and finished calls disappear.
-      const guestName = request.query.guestName
-      const meetingTypeId = request.query.meetingTypeId
+      const { guestName, meetingTypeId, fromDate, toDate } = request.query
       return fastify.bookings.upcoming(new Date(), {
         ...(guestName ? { guestName } : {}),
-        ...(meetingTypeId ? { meetingTypeId } : {})
+        ...(meetingTypeId ? { meetingTypeId } : {}),
+        ...(fromDate ? { fromDate } : {}),
+        ...(toDate ? { toDate } : {})
       })
     }
   )

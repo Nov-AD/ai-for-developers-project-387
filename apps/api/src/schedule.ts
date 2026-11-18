@@ -29,6 +29,18 @@ export function utcInstant(instant: Date): string {
   return formatInTimeZone(instant, 'UTC', "yyyy-MM-dd'T'HH:mm:ss'Z'")
 }
 
+/** Calendar date of an instant in the owner's time zone; never the process or browser zone. */
+export function ownerDate(instant: string | Date): string {
+  return formatInTimeZone(instant, OWNER_TIME_ZONE, 'yyyy-MM-dd')
+}
+
+/** Strict YYYY-MM-DD check that also rejects impossible dates such as 2026-02-30. */
+export function isOwnerDate(value: string): boolean {
+  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)) return false
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
 function overlaps(slotStart: number, slotEnd: number, bookings: TimeInterval[]): boolean {
   return bookings.some((booking) => {
     const start = Date.parse(booking.start)

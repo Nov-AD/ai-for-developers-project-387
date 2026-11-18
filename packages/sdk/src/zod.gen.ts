@@ -153,7 +153,9 @@ export const zGetAvailabilityResponse = zAvailability;
 
 export const zListUpcomingBookingsQuery = z.object({
     guestName: zGuestNameFilter.optional(),
-    meetingTypeId: zUuid.optional()
+    meetingTypeId: zUuid.optional(),
+    fromDate: zOwnerDate.optional(),
+    toDate: zOwnerDate.optional()
 });
 
 /**

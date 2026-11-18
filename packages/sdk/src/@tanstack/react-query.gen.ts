@@ -69,8 +69,11 @@ export const listUpcomingBookingsQueryKey = (options?: Options<ListUpcomingBooki
  * after trimming with 400 VALIDATION_ERROR. The optional meetingTypeId query parameter
  * narrows the list to bookings of one type; a malformed UUID is 400 VALIDATION_ERROR,
  * while a well-formed UUID with no matching type is still 200 [] because this is a filter,
- * not a lookup of one type. All active filters combine with AND. Unknown query parameters
- * are still rejected.
+ * not a lookup of one type. The optional fromDate and toDate query parameters are inclusive
+ * YYYY-MM-DD calendar-date bounds for a booking's start in Europe/Moscow, not UTC or the
+ * browser zone; either bound may be supplied alone. Empty date strings, malformed dates and
+ * fromDate later than toDate are 400 VALIDATION_ERROR. All active filters combine with AND.
+ * Unknown query parameters are still rejected.
  */
 export const listUpcomingBookingsOptions = (options?: Options<ListUpcomingBookingsData>) => queryOptions<ListUpcomingBookingsResponse, ListUpcomingBookingsError, ListUpcomingBookingsResponse, ReturnType<typeof listUpcomingBookingsQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {

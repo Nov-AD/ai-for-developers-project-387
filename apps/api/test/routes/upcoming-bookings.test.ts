@@ -1,6 +1,10 @@
 import Fastify, { type FastifyInstance } from 'fastify'
+import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import app from '../../src/app.ts'
+import { MemoryBookingRepository } from '../../src/repositories/bookings.ts'
+import { MemoryMeetingTypeRepository } from '../../src/repositories/meeting-types.ts'
+import bookingRoutes from '../../src/routes/bookings.ts'
 import { assertContractResponse, contractOperations } from '../helpers/contract.ts'
 
 const instances: FastifyInstance[] = []
@@ -13,6 +17,21 @@ async function build(): Promise<FastifyInstance> {
   instances.push(instance)
   await instance.register(app)
   return instance
+}
+
+async function buildWithSeededRepository() {
+  const instance = Fastify()
+  instances.push(instance)
+  instance.setValidatorCompiler(validatorCompiler)
+  instance.setSerializerCompiler(serializerCompiler)
+  const meetingTypes = new MemoryMeetingTypeRepository()
+  const bookings = new MemoryBookingRepository()
+  instance.decorate('meetingTypes', meetingTypes)
+  instance.decorate('bookings', bookings)
+  instance.decorate('bookingWindowStart', 'tomorrow')
+  await instance.register(bookingRoutes)
+  await instance.ready()
+  return { instance, meetingTypes, bookings }
 }
 
 async function createType(
@@ -60,6 +79,13 @@ async function upcomingByGuestName(instance: FastifyInstance, guestName: string)
 
 async function upcomingByMeetingType(instance: FastifyInstance, meetingTypeId: string) {
   return instance.inject({ method: 'GET', url: '/bookings', query: { meetingTypeId } })
+}
+
+async function upcomingByDates(
+  instance: FastifyInstance,
+  query: { fromDate?: string; toDate?: string }
+) {
+  return instance.inject({ method: 'GET', url: '/bookings', query })
 }
 
 /** Tuesday 12:00 in Europe/Moscow; the window starts tomorrow (2026-11-18). */
@@ -299,6 +325,129 @@ describe('GET /bookings', () => {
     vi.setSystemTime(new Date('2026-11-18T06:30:00Z'))
     const ended = await upcomingByMeetingType(instance, id)
     expect(ended.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([later.id])
+  })
+
+  it('applies inclusive date bounds and accepts either bound alone', async () => {
+    freeze()
+    const instance = await build()
+    const id = await createType(instance, 'Звонок', 30)
+    const first = await book(instance, id, '2026-11-18T06:00:00Z', 'Анна')
+    const second = await book(instance, id, '2026-11-19T06:00:00Z', 'Борис')
+    const third = await book(instance, id, '2026-11-20T06:00:00Z', 'Вера')
+
+    const both = await upcomingByDates(instance, {
+      fromDate: '2026-11-18',
+      toDate: '2026-11-19'
+    })
+    expect(both.statusCode).toBe(200)
+    expect(both.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([
+      first.id,
+      second.id
+    ])
+    assertContractResponse(listOperation, both.statusCode, both.json())
+
+    const fromOnly = await upcomingByDates(instance, { fromDate: '2026-11-19' })
+    expect(fromOnly.statusCode).toBe(200)
+    expect(fromOnly.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([
+      second.id,
+      third.id
+    ])
+
+    const toOnly = await upcomingByDates(instance, { toDate: '2026-11-18' })
+    expect(toOnly.statusCode).toBe(200)
+    expect(toOnly.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([first.id])
+
+    const sameDay = await upcomingByDates(instance, {
+      fromDate: '2026-11-19',
+      toDate: '2026-11-19'
+    })
+    expect(sameDay.statusCode).toBe(200)
+    expect(sameDay.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([second.id])
+  })
+
+  it('uses the booking start calendar date in Europe/Moscow, not the UTC date', async () => {
+    freeze()
+    const { instance, meetingTypes, bookings } = await buildWithSeededRepository()
+    const meetingType = meetingTypes.create({ name: 'Звонок', durationMinutes: 30 })
+    const lateMoscow = bookings.save({
+      meetingType,
+      guestName: 'Поздний',
+      start: '2026-11-18T20:30:00Z',
+      end: '2026-11-18T21:00:00Z'
+    })
+    const afterMidnightMoscow = bookings.save({
+      meetingType,
+      guestName: 'После полуночи',
+      start: '2026-11-18T21:30:00Z',
+      end: '2026-11-18T22:00:00Z'
+    })
+    expect(lateMoscow.status).toBe('saved')
+    expect(afterMidnightMoscow.status).toBe('saved')
+    const lateMoscowId = lateMoscow.status === 'saved' ? lateMoscow.booking.id : ''
+    const afterMidnightMoscowId =
+      afterMidnightMoscow.status === 'saved' ? afterMidnightMoscow.booking.id : ''
+
+    const moscowDate = await upcomingByDates(instance, {
+      fromDate: '2026-11-18',
+      toDate: '2026-11-18'
+    })
+    expect(moscowDate.statusCode).toBe(200)
+    expect(moscowDate.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([
+      lateMoscowId
+    ])
+
+    const nextMoscowDate = await upcomingByDates(instance, {
+      fromDate: '2026-11-19',
+      toDate: '2026-11-19'
+    })
+    expect(nextMoscowDate.statusCode).toBe(200)
+    expect(nextMoscowDate.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([
+      afterMidnightMoscowId
+    ])
+  })
+
+  it('rejects empty, malformed and impossible dates and a reversed range', async () => {
+    freeze()
+    const instance = await build()
+
+    for (const query of [
+      { fromDate: '' },
+      { toDate: '' },
+      { fromDate: '18.11.2026' },
+      { toDate: '2026-02-30' },
+      { fromDate: '2026-11-19', toDate: '2026-11-18' }
+    ]) {
+      const response = await upcomingByDates(instance, query)
+      expect(response.statusCode, JSON.stringify(query)).toBe(400)
+      expect(response.json()).toMatchObject({ code: 'VALIDATION_ERROR' })
+      assertContractResponse(listOperation, response.statusCode, response.json())
+    }
+  })
+
+  it('combines date bounds with guest-name and meeting-type filters with AND', async () => {
+    freeze()
+    const instance = await build()
+    const short = await createType(instance, 'Короткий', 30)
+    const long = await createType(instance, 'Длинный', 45)
+    const matching = await book(instance, short, '2026-11-18T06:00:00Z', 'Anna')
+    await book(instance, short, '2026-11-18T07:00:00Z', 'Boris')
+    await book(instance, short, '2026-11-19T06:00:00Z', 'Anna')
+    await book(instance, long, '2026-11-18T08:00:00Z', 'Anna')
+
+    const response = await instance.inject({
+      method: 'GET',
+      url: '/bookings',
+      query: {
+        meetingTypeId: short,
+        guestName: '  anna  ',
+        fromDate: '2026-11-18',
+        toDate: '2026-11-18'
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json<Array<{ id: string }>>().map(({ id }) => id)).toEqual([matching.id])
+    assertContractResponse(listOperation, response.statusCode, response.json())
   })
 
   it('rejects unknown query parameters with the contract validation error', async () => {
