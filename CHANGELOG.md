@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.3](https://github.com/Nov-AD/ai-for-developers-project-387/compare/v0.3.2...v0.3.3) (2026-11-18)
+
+
+### Bug Fixes
+
+* **ci:** diagnose incomplete PR review responses ([#23](https://github.com/Nov-AD/ai-for-developers-project-387/issues/23)) ([2099ad7](https://github.com/Nov-AD/ai-for-developers-project-387/commit/2099ad74892dc6cf62844efddfa60bc44bcbf51c))
+* **ci:** diagnose incomplete PR review responses ([#23](https://github.com/Nov-AD/ai-for-developers-project-387/issues/23)) ([14b95d5](https://github.com/Nov-AD/ai-for-developers-project-387/commit/14b95d57fb795792302f14a2ed794dc9212d814f))
+
 ## [0.3.2](https://github.com/Nov-AD/ai-for-developers-project-387/compare/v0.3.1...v0.3.2) (2026-11-18)
 
 
