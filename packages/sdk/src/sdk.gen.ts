@@ -24,7 +24,13 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 export const getAvailability = <ThrowOnError extends boolean = false>(options: Options<GetAvailabilityData, ThrowOnError>): RequestResult<GetAvailabilityResponses, GetAvailabilityErrors, ThrowOnError> => (options.client ?? client).get<GetAvailabilityResponses, GetAvailabilityErrors, ThrowOnError>({ url: '/availability', ...options });
 
 /**
- * Return all types' bookings whose end is strictly later than now, including calls already in progress; exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit time zone. No query parameters. Refresh on owner page entry, focus and manual refresh; no polling required.
+ * Return all types' bookings whose end is strictly later than now, including calls already
+ * in progress; exclude calls ending exactly now. Recompute now per request. Sort by start
+ * ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit
+ * time zone. Refresh on owner page entry, focus and manual refresh; no polling required.
+ * The optional guestName query parameter trims surrounding whitespace, ignores an empty
+ * value, matches a case-insensitive substring and rejects values longer than 100 characters
+ * after trimming with 400 VALIDATION_ERROR. Unknown query parameters are still rejected.
  */
 export const listUpcomingBookings = <ThrowOnError extends boolean = false>(options?: Options<ListUpcomingBookingsData, ThrowOnError>): RequestResult<ListUpcomingBookingsResponses, ListUpcomingBookingsErrors, ThrowOnError> => (options?.client ?? client).get<ListUpcomingBookingsResponses, ListUpcomingBookingsErrors, ThrowOnError>({ url: '/bookings', ...options });
 

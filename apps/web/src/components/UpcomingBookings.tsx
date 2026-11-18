@@ -1,10 +1,12 @@
 import { listUpcomingBookingsOptions, type Booking } from '@calendar/sdk'
 import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { formatInstant } from '@/lib/time'
 
 /** The owner is a single preconfigured person in this zone. */
 const OWNER_TIME_ZONE = 'Europe/Moscow'
+const GUEST_NAME_DEBOUNCE_MS = 300
 
 function BookingItem({ booking }: { booking: Booking }) {
   return (
@@ -22,18 +24,62 @@ function BookingItem({ booking }: { booking: Booking }) {
 }
 
 export function UpcomingBookings() {
+  const [guestNameInput, setGuestNameInput] = useState('')
+  const [guestNameFilter, setGuestNameFilter] = useState('')
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setGuestNameFilter(guestNameInput.trim())
+    }, GUEST_NAME_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [guestNameInput])
+
+  const hasActiveFilters = guestNameFilter !== ''
   const upcoming = useQuery({
-    ...listUpcomingBookingsOptions(),
+    ...listUpcomingBookingsOptions(
+      hasActiveFilters ? { query: { guestName: guestNameFilter } } : undefined
+    ),
     // Refresh on page entry and window focus; the button below covers a manual refresh.
     refetchOnWindowFocus: true,
     retry: false
   })
+
+  function preventSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+  }
+
+  function resetFilters() {
+    setGuestNameInput('')
+    setGuestNameFilter('')
+  }
 
   return (
     <div className="mt-4 space-y-4">
       <p className="text-sm text-muted-foreground">
         Время указано в часовом поясе владельца: {OWNER_TIME_ZONE}.
       </p>
+
+      <form
+        onSubmit={preventSubmit}
+        aria-label="Фильтры предстоящих записей"
+        className="flex flex-wrap items-end gap-4"
+      >
+        <div className="space-y-2">
+          <label htmlFor="upcoming-guest-name" className="block text-sm font-medium">
+            Имя гостя
+          </label>
+          <input
+            id="upcoming-guest-name"
+            name="guestName"
+            value={guestNameInput}
+            onChange={(event) => setGuestNameInput(event.target.value)}
+            className="rounded-md border bg-background px-3 py-2 focus-visible:outline-2 focus-visible:outline-ring"
+          />
+        </div>
+        <Button type="button" variant="outline" onClick={resetFilters}>
+          Сбросить фильтры
+        </Button>
+      </form>
 
       {upcoming.isPending && (
         <p role="status" className="text-muted-foreground">
@@ -55,7 +101,9 @@ export function UpcomingBookings() {
       )}
 
       {upcoming.isSuccess && upcoming.data.length === 0 && (
-        <p className="text-muted-foreground">Предстоящих записей нет.</p>
+        <p className="text-muted-foreground">
+          {hasActiveFilters ? 'По выбранным фильтрам записей нет.' : 'Предстоящих записей нет.'}
+        </p>
       )}
 
       {upcoming.isSuccess && upcoming.data.length > 0 && (

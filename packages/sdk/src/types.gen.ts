@@ -94,6 +94,11 @@ export type CreateMeetingTypeInput = {
 export type DurationMinutes = number;
 
 /**
+ * Optional guest name filter. Surrounding whitespace is ignored; an empty value disables the filter. Matching is a case-insensitive substring; more than 100 characters after trimming is invalid.
+ */
+export type GuestNameFilter = string;
+
+/**
  * Health check response.
  */
 export type HealthResponse = {
@@ -286,7 +291,12 @@ export type GetAvailabilityResponse = GetAvailabilityResponses[keyof GetAvailabi
 export type ListUpcomingBookingsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Optional guest name filter; case-insensitive substring after trimming. Empty value disables the filter.
+         */
+        guestName?: GuestNameFilter;
+    };
     url: '/bookings';
 };
 

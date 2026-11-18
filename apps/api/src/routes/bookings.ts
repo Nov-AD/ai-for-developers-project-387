@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { type FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
-import type { components } from '../generated/openapi.js'
+import type { components, operations } from '../generated/openapi.js'
 import { addMinutes } from 'date-fns'
 import { isBookableStart, ownerWindow, utcInstant } from '../schedule.ts'
 
@@ -56,6 +56,10 @@ const createInput = z.strictObject({
   start: instant,
   guestName: z.string().trim().min(1).max(100)
 }) satisfies z.ZodType<components['schemas']['CreateBookingInput']>
+
+const upcomingFilters = z.strictObject({
+  guestName: z.string().trim().max(100).optional()
+}) satisfies z.ZodType<NonNullable<operations['listUpcomingBookings']['parameters']['query']>>
 
 const bookingRoutes: FastifyPluginAsyncZod = async (fastify): Promise<void> => {
   fastify.post(
@@ -127,22 +131,23 @@ const bookingRoutes: FastifyPluginAsyncZod = async (fastify): Promise<void> => {
     '/bookings',
     {
       schema: {
-        querystring: z.strictObject({}),
+        querystring: upcomingFilters,
         response: { 200: z.array(booking), 400: validationError }
       },
       errorHandler: (error, _request, reply) => {
         if (error.validation) {
           return reply.code(400).send({
             code: 'VALIDATION_ERROR',
-            message: 'Неизвестный параметр запроса.'
+            message: 'Проверьте параметры запроса.'
           })
         }
         throw error
       }
     },
-    async () => {
+    async (request) => {
       // Recomputed per request: the window advances and finished calls disappear.
-      return fastify.bookings.upcoming(new Date())
+      const guestName = request.query.guestName
+      return fastify.bookings.upcoming(new Date(), guestName ? { guestName } : {})
     }
   )
 }

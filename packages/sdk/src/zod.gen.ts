@@ -8,6 +8,11 @@ import * as z from 'zod';
 export const zDurationMinutes = z.int().gte(1).lte(540);
 
 /**
+ * Optional guest name filter. Surrounding whitespace is ignored; an empty value disables the filter. Matching is a case-insensitive substring; more than 100 characters after trimming is invalid.
+ */
+export const zGuestNameFilter = z.string().regex(/^\s*(?:\S(?:[\s\S]{0,98}\S)?)?\s*$/);
+
+/**
  * Health check response.
  */
 export const zHealthResponse = z.object({
@@ -145,6 +150,10 @@ export const zGetAvailabilityQuery = z.object({
  * The request has succeeded.
  */
 export const zGetAvailabilityResponse = zAvailability;
+
+export const zListUpcomingBookingsQuery = z.object({
+    guestName: zGuestNameFilter.optional()
+});
 
 /**
  * The request has succeeded.
