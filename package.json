@@ -21,7 +21,7 @@
     "lint:actions": "jactionlint .github/workflows/ci.yml .github/workflows/push-check.yml .github/workflows/security.yml .github/workflows/release-please.yml .github/workflows/auto-triage.yml .github/workflows/pr-review.yml .github/workflows/pr-head-e2e.yml",
     "skills:check": "node scripts/check-agent-skills.mjs",
     "secrets": "betterleaks git --redact --no-banner",
-    "audit": "osv-scanner scan source --allow-no-lockfiles pnpm-lock.yaml .github/auto-triage/package-lock.json .github/manual-agent/package-lock.json",
+    "audit": "osv-scanner scan source --lockfile pnpm-lock.yaml --lockfile .github/auto-triage/package-lock.json --lockfile .github/manual-agent/package-lock.json",
     "commitlint:ci": "node scripts/check-commit-messages.mjs",
     "fmt": "oxfmt --write 'apps/**/*.{ts,tsx,js,jsx,json,css}' 'packages/**/*.{ts,tsx,js,jsx,json}' 'scripts/**/*.{js,mjs,ts}' '*.{json,js,ts}'",
     "fmt:check": "oxfmt --check 'apps/**/*.{ts,tsx,js,jsx,json,css}' 'packages/**/*.{ts,tsx,js,jsx,json}' 'scripts/**/*.{js,mjs,ts}' '*.{json,js,ts}'",

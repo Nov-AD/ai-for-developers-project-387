@@ -19,5 +19,5 @@
     }
   },
   "ignoreDependencies": ["@hey-api/client-fetch"],
-  "ignoreBinaries": ["jactionlint", "betterleaks", "osv-scanner", "oasdiff", "vacuum"]
+  "ignoreBinaries": ["mise", "jactionlint", "betterleaks", "osv-scanner", "oasdiff", "vacuum"]
 }
