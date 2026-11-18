@@ -35,8 +35,7 @@ function redactResponse(text, env) {
   return { response: redacted.slice(0, 8000), responseTruncated: redacted.length > 8000 }
 }
 
-export function writeReviewDiagnostics(path, result, failure) {
-  // Never retain the raw event stream, tool inputs/results, reasoning or stderr.
+function reviewData(result) {
   const events = []
   let malformedLines = 0
   for (const line of (result.stdout ?? '').trim().split('\n')) {
@@ -48,16 +47,35 @@ export function writeReviewDiagnostics(path, result, failure) {
       malformedLines++
     }
   }
-  const text = events.findLast((event) => event.type === 'text')?.part?.text
   const finish = events.findLast((event) => event.type === 'step_finish')?.part?.reason
+  return {
+    events,
+    metrics: {
+      exitCode: result.status,
+      signal: result.signal,
+      stepsStarted: events.filter((event) => event.type === 'step_start').length,
+      stepsFinished: events.filter((event) => event.type === 'step_finish').length,
+      finishReason: finishReasons.has(finish) ? finish : 'unavailable',
+      malformedLines
+    }
+  }
+}
+
+export function writeReviewMetrics(path, result, outcome) {
+  // The success artifact contains only counters/status, never model or PR content.
+  const { metrics } = reviewData(result)
+  const record = { outcome, ...metrics }
+  writeFileSync(path, JSON.stringify(record, null, 2) + '\n', { mode: 0o600 })
+  return record
+}
+
+export function writeReviewDiagnostics(path, result, failure) {
+  // Never retain the raw event stream, tool inputs/results, reasoning or stderr.
+  const { events, metrics } = reviewData(result)
+  const text = events.findLast((event) => event.type === 'text')?.part?.text
   const diagnostic = {
     failure,
-    exitCode: result.status,
-    signal: result.signal,
-    stepsStarted: events.filter((event) => event.type === 'step_start').length,
-    stepsFinished: events.filter((event) => event.type === 'step_finish').length,
-    finishReason: finishReasons.has(finish) ? finish : 'unavailable',
-    malformedLines,
+    ...metrics,
     ...redactResponse(typeof text === 'string' ? text : '', process.env)
   }
   writeFileSync(path, JSON.stringify(diagnostic, null, 2) + '\n', { mode: 0o600 })
