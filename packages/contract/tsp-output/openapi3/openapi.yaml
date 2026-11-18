@@ -273,8 +273,22 @@ paths:
             message: This slot has been taken. Please choose another.
     get:
       operationId: listUpcomingBookings
-      description: Return all types' bookings whose end is strictly later than now, including calls already in progress; exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit time zone. No query parameters. Refresh on owner page entry, focus and manual refresh; no polling required.
-      parameters: []
+      description: |-
+        Return all types' bookings whose end is strictly later than now, including calls already
+        in progress; exclude calls ending exactly now. Recompute now per request. Sort by start
+        ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit
+        time zone. Refresh on owner page entry, focus and manual refresh; no polling required.
+        The optional guestName query parameter trims surrounding whitespace, ignores an empty
+        value, matches a case-insensitive substring and rejects values longer than 100 characters
+        after trimming with 400 VALIDATION_ERROR. Unknown query parameters are still rejected.
+      parameters:
+        - name: guestName
+          in: query
+          required: false
+          description: Optional guest name filter; case-insensitive substring after trimming. Empty value disables the filter.
+          schema:
+            $ref: '#/components/schemas/GuestNameFilter'
+          explode: false
       responses:
         '200':
           description: The request has succeeded.
@@ -285,6 +299,18 @@ paths:
                 items:
                   $ref: '#/components/schemas/Booking'
               examples:
+                Filtered by guest name:
+                  summary: Filtered by guest name
+                  value:
+                    - id: 22222222-2222-4222-8222-222222222222
+                      meetingType:
+                        id: 11111111-1111-4111-8111-111111111111
+                        name: Introduction
+                        description: ''
+                        durationMinutes: 45
+                      guestName: Alex
+                      start: '2026-11-18T06:00:00Z'
+                      end: '2026-11-18T06:45:00Z'
                 Upcoming and ongoing calls:
                   summary: Upcoming and ongoing calls
                   value:
@@ -308,7 +334,7 @@ paths:
                 $ref: '#/components/schemas/ValidationError'
               example:
                 code: VALIDATION_ERROR
-                message: Unknown query parameter.
+                message: Проверьте параметры запроса.
       tags:
         - Calendar
       x-contract-scenarios:
@@ -327,6 +353,66 @@ paths:
               guestName: Alex
               start: '2026-11-18T06:00:00Z'
               end: '2026-11-18T06:45:00Z'
+        - name: filtered
+          request:
+            query:
+              guestName: Alex
+          status: 200
+          body:
+            - id: 22222222-2222-4222-8222-222222222222
+              meetingType:
+                id: 11111111-1111-4111-8111-111111111111
+                name: Introduction
+                description: ''
+                durationMinutes: 45
+              guestName: Alex
+              start: '2026-11-18T06:00:00Z'
+              end: '2026-11-18T06:45:00Z'
+        - name: filtered-empty
+          request:
+            query:
+              guestName: Nobody
+          status: 200
+          body: []
+        - name: trimmed-filter
+          request:
+            query:
+              guestName: '  Alex  '
+          status: 200
+          body:
+            - id: 22222222-2222-4222-8222-222222222222
+              meetingType:
+                id: 11111111-1111-4111-8111-111111111111
+                name: Introduction
+                description: ''
+                durationMinutes: 45
+              guestName: Alex
+              start: '2026-11-18T06:00:00Z'
+              end: '2026-11-18T06:45:00Z'
+        - name: empty-filter
+          request:
+            query:
+              guestName: '   '
+          status: 200
+          body:
+            - id: 22222222-2222-4222-8222-222222222222
+              meetingType:
+                id: 11111111-1111-4111-8111-111111111111
+                name: Introduction
+                description: ''
+                durationMinutes: 45
+              guestName: Alex
+              start: '2026-11-18T06:00:00Z'
+              end: '2026-11-18T06:45:00Z'
+        - name: too-long-filter
+          request:
+            query:
+              guestName: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          requestValid: false
+          status: 400
+          body:
+            code: VALIDATION_ERROR
+            message: Проверьте параметры запроса.
         - name: unknown-query
           request:
             query:
@@ -335,7 +421,7 @@ paths:
           status: 400
           body:
             code: VALIDATION_ERROR
-            message: 'Unknown query parameter: extra.'
+            message: Проверьте параметры запроса.
   /health:
     get:
       operationId: getHealth
@@ -612,6 +698,12 @@ components:
       description: Integer duration in minutes; need not be a multiple of the 30-minute start grid.
       examples:
         - 45
+    GuestNameFilter:
+      type: string
+      pattern: ^\s*(?:\S(?:[\s\S]{0,98}\S)?)?\s*$
+      description: Optional guest name filter. Surrounding whitespace is ignored; an empty value disables the filter. Matching is a case-insensitive substring; more than 100 characters after trimming is invalid.
+      examples:
+        - ' Alex '
     HealthResponse:
       type: object
       required:

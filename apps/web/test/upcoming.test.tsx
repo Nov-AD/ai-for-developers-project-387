@@ -135,6 +135,172 @@ describe('Owner upcoming bookings', () => {
     expect(bookingCalls(fetch)).toHaveLength(2)
   })
 
+  it('labels the guest name control and applies it after a short debounce', async () => {
+    const fetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/meeting-types') return meetingTypesResponse('empty')
+      if (url.pathname === '/bookings') {
+        return url.searchParams.has('guestName')
+          ? upcomingResponse('populated', [firstBooking])
+          : upcomingResponse('populated', [firstBooking, secondBooking])
+      }
+      throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderOwner()
+
+    const input = await screen.findByLabelText('Имя гостя')
+    expect(input).toHaveAccessibleName('Имя гостя')
+    expect(await screen.findByText('Борис')).toBeInTheDocument()
+    const before = bookingCalls(fetch).length
+
+    fireEvent.change(input, { target: { value: '  анна  ' } })
+
+    expect(bookingCalls(fetch)).toHaveLength(before)
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(before), {
+      timeout: 1500
+    })
+    const request = bookingCalls(fetch).at(-1)![0] as Request
+    expect(new URL(request.url).searchParams.get('guestName')).toBe('анна')
+    await waitFor(() => expect(screen.queryByText('Борис')).not.toBeInTheDocument())
+    expect(screen.getByText('Анна')).toBeInTheDocument()
+  })
+
+  it('clears the guest name and immediately requests the full list on reset', async () => {
+    const fetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/meeting-types') return meetingTypesResponse('empty')
+      if (url.pathname === '/bookings') {
+        return url.searchParams.has('guestName')
+          ? upcomingResponse('populated', [firstBooking])
+          : upcomingResponse('populated', [firstBooking, secondBooking])
+      }
+      throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderOwner()
+
+    const input = await screen.findByLabelText('Имя гостя')
+    await screen.findByText('Борис')
+    fireEvent.change(input, { target: { value: 'Анна' } })
+    await waitFor(() => expect(screen.queryByText('Борис')).not.toBeInTheDocument(), {
+      timeout: 1500
+    })
+    const before = bookingCalls(fetch).length
+
+    fireEvent.click(screen.getByRole('button', { name: 'Сбросить фильтры' }))
+
+    expect(input).toHaveValue('')
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(before))
+    const request = bookingCalls(fetch).at(-1)![0] as Request
+    expect(new URL(request.url).searchParams.has('guestName')).toBe(false)
+    expect(await screen.findByText('Борис')).toBeInTheDocument()
+  })
+
+  it('distinguishes an empty filtered result from no upcoming bookings', async () => {
+    const fetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/meeting-types') return meetingTypesResponse('empty')
+      if (url.pathname === '/bookings') {
+        return url.searchParams.has('guestName')
+          ? upcomingResponse('filtered-empty')
+          : upcomingResponse('empty')
+      }
+      throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderOwner()
+
+    expect(await screen.findByText('Предстоящих записей нет.')).toBeInTheDocument()
+    fireEvent.change(await screen.findByLabelText('Имя гостя'), {
+      target: { value: 'Никого' }
+    })
+
+    expect(await screen.findByText('По выбранным фильтрам записей нет.')).toBeInTheDocument()
+    expect(screen.queryByText('Предстоящих записей нет.')).not.toBeInTheDocument()
+  })
+
+  it('shows the existing read error for a filtered request', async () => {
+    const fetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/meeting-types') return meetingTypesResponse('empty')
+      if (url.pathname === '/bookings') {
+        return url.searchParams.has('guestName')
+          ? upcomingResponse('unknown-query')
+          : upcomingResponse('empty')
+      }
+      throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderOwner()
+
+    await screen.findByText('Предстоящих записей нет.')
+    fireEvent.change(await screen.findByLabelText('Имя гостя'), { target: { value: 'Анна' } })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Не удалось загрузить предстоящие записи.'
+    )
+  })
+
+  it('shows the existing loading state while a filtered request is pending', async () => {
+    const filtered = Promise.withResolvers<Response>()
+    const fetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/meeting-types') return meetingTypesResponse('empty')
+      if (url.pathname === '/bookings') {
+        return url.searchParams.has('guestName')
+          ? filtered.promise
+          : upcomingResponse('populated', [firstBooking, secondBooking])
+      }
+      throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderOwner()
+
+    await screen.findByText('Борис')
+    fireEvent.change(await screen.findByLabelText('Имя гостя'), { target: { value: 'Анна' } })
+
+    expect(await screen.findByText('Загружаем предстоящие записи…')).toHaveAttribute(
+      'role',
+      'status'
+    )
+    filtered.resolve(upcomingResponse('populated', [firstBooking]))
+    expect(await screen.findByText('Анна')).toBeInTheDocument()
+  })
+
+  it('keeps the guest name filter when the list is refreshed manually', async () => {
+    const fetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/meeting-types') return meetingTypesResponse('empty')
+      if (url.pathname === '/bookings') {
+        return url.searchParams.has('guestName')
+          ? upcomingResponse('populated', [firstBooking])
+          : upcomingResponse('populated', [firstBooking, secondBooking])
+      }
+      throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderOwner()
+
+    const input = await screen.findByLabelText('Имя гостя')
+    const initialCalls = bookingCalls(fetch).length
+    fireEvent.change(input, { target: { value: 'Анна' } })
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(initialCalls), {
+      timeout: 1500
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Обновить список' })).toBeEnabled()
+    )
+    const before = bookingCalls(fetch).length
+
+    fireEvent.click(screen.getByRole('button', { name: 'Обновить список' }))
+
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(before))
+    const request = bookingCalls(fetch).at(-1)![0] as Request
+    expect(new URL(request.url).searchParams.get('guestName')).toBe('Анна')
+    expect(input).toHaveValue('Анна')
+  })
+
   it('refreshes the list when the window regains visibility without polling', async () => {
     const fetch = mockOwner((attempt) =>
       attempt === 1

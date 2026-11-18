@@ -92,6 +92,11 @@ scalar TrimmedName extends string;
 @example(" Introduction ")
 scalar NameInput extends string;
 
+@doc("Optional guest name filter. Surrounding whitespace is ignored; an empty value disables the filter. Matching is a case-insensitive substring; more than 100 characters after trimming is invalid.")
+@pattern("^\\s*(?:\\S(?:[\\s\\S]{0,98}\\S)?)?\\s*$")
+@example(" Alex ")
+scalar GuestNameFilter extends string;
+
 @doc("Description, at most 2000 characters; empty is allowed. Preserved as supplied, not trimmed.")
 @maxLength(2000)
 @example("")
@@ -327,16 +332,31 @@ refresh availability. There is no idempotency key or booking lookup/confirmation
 ])
 op createBooking(@doc("Selected meeting type/start and guest name; no server-owned fields.") @body body: CreateBookingInput): Created<Booking> | BadRequest<ValidationError | InvalidSlotError> | NotFound | Conflict;
 
-@doc("Return all types' bookings whose end is strictly later than now, including calls already in progress; exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit time zone. No query parameters. Refresh on owner page entry, focus and manual refresh; no polling required.")
+@doc("""
+Return all types' bookings whose end is strictly later than now, including calls already
+in progress; exclude calls ending exactly now. Recompute now per request. Sort by start
+ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit
+time zone. Refresh on owner page entry, focus and manual refresh; no polling required.
+The optional guestName query parameter trims surrounding whitespace, ignores an empty
+value, matches a case-insensitive substring and rejects values longer than 100 characters
+after trimming with 400 VALIDATION_ERROR. Unknown query parameters are still rejected.
+""")
 @route("/bookings")
 @get
 @opExample(#{returnType: #[]}, #{title: "Empty list"})
 @opExample(#{returnType: #[exampleBooking]}, #{title: "Upcoming and ongoing calls"})
-@opExample(#{returnType: #{statusCode: 400, body: #{code: "VALIDATION_ERROR", message: "Unknown query parameter."}}})
+@opExample(#{parameters: #{guestName: "Alex"}, returnType: #[exampleBooking]}, #{title: "Filtered by guest name"})
+@opExample(#{returnType: #{statusCode: 400, body: #{code: "VALIDATION_ERROR", message: "Проверьте параметры запроса."}}})
 @extension("x-contract-scenarios", #[
   #{name: "empty", status: 200, body: #[]},
   #{name: "populated", status: 200, body: #[exampleBooking]},
+  #{name: "filtered", request: #{query: #{guestName: "Alex"}}, status: 200, body: #[exampleBooking]},
+  #{name: "filtered-empty", request: #{query: #{guestName: "Nobody"}}, status: 200, body: #[]},
+  #{name: "trimmed-filter", request: #{query: #{guestName: "  Alex  "}}, status: 200, body: #[exampleBooking]},
+  #{name: "empty-filter", request: #{query: #{guestName: "   "}}, status: 200, body: #[exampleBooking]},
+  #{name: "too-long-filter", request: #{query: #{guestName: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, requestValid: false,
+    status: 400, body: #{code: "VALIDATION_ERROR", message: "Проверьте параметры запроса."}},
   #{name: "unknown-query", request: #{query: #{extra: "x"}}, requestValid: false,
-    status: 400, body: #{code: "VALIDATION_ERROR", message: "Unknown query parameter: extra."}}
+    status: 400, body: #{code: "VALIDATION_ERROR", message: "Проверьте параметры запроса."}}
 ])
-op listUpcomingBookings(): Booking[] | BadRequest;
+op listUpcomingBookings(@doc("Optional guest name filter; case-insensitive substring after trimming. Empty value disables the filter.") @query guestName?: GuestNameFilter): Booking[] | BadRequest;

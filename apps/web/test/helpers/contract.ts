@@ -113,7 +113,15 @@ export async function assertCreateBookingRequest(
 
 /** Upcoming bookings response built from the TypeSpec scenarios for `GET /bookings`. */
 export function upcomingResponse(
-  name: 'empty' | 'populated' | 'unknown-query',
+  name:
+    | 'empty'
+    | 'populated'
+    | 'filtered'
+    | 'filtered-empty'
+    | 'trimmed-filter'
+    | 'empty-filter'
+    | 'too-long-filter'
+    | 'unknown-query',
   body?: unknown
 ): Response {
   const operation = contract.paths['/bookings'].get

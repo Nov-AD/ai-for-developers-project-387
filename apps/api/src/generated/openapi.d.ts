@@ -28,7 +28,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Return all types' bookings whose end is strictly later than now, including calls already in progress; exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit time zone. No query parameters. Refresh on owner page entry, focus and manual refresh; no polling required. */
+        /**
+         * @description Return all types' bookings whose end is strictly later than now, including calls already
+         *     in progress; exclude calls ending exactly now. Recompute now per request. Sort by start
+         *     ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit
+         *     time zone. Refresh on owner page entry, focus and manual refresh; no polling required.
+         *     The optional guestName query parameter trims surrounding whitespace, ignores an empty
+         *     value, matches a case-insensitive substring and rejects values longer than 100 characters
+         *     after trimming with 400 VALIDATION_ERROR. Unknown query parameters are still rejected.
+         */
         get: operations["listUpcomingBookings"];
         put?: never;
         /**
@@ -177,6 +185,11 @@ export interface components {
          * @example 45
          */
         DurationMinutes: number;
+        /**
+         * @description Optional guest name filter. Surrounding whitespace is ignored; an empty value disables the filter. Matching is a case-insensitive substring; more than 100 characters after trimming is invalid.
+         * @example Alex
+         */
+        GuestNameFilter: string;
         /** @description Health check response. */
         HealthResponse: {
             /**
@@ -412,7 +425,10 @@ export interface operations {
     };
     listUpcomingBookings: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional guest name filter; case-insensitive substring after trimming. Empty value disables the filter. */
+                guestName?: components["schemas"]["GuestNameFilter"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -437,7 +453,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "code": "VALIDATION_ERROR",
-                     *       "message": "Unknown query parameter."
+                     *       "message": "Проверьте параметры запроса."
                      *     }
                      */
                     "application/json": components["schemas"]["ValidationError"];

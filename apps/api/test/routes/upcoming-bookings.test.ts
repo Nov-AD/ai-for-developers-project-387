@@ -54,6 +54,10 @@ async function upcoming(instance: FastifyInstance) {
   return instance.inject({ method: 'GET', url: '/bookings' })
 }
 
+async function upcomingByGuestName(instance: FastifyInstance, guestName: string) {
+  return instance.inject({ method: 'GET', url: '/bookings', query: { guestName } })
+}
+
 /** Tuesday 12:00 in Europe/Moscow; the window starts tomorrow (2026-11-18). */
 function freeze(now = '2026-11-17T09:00:00Z') {
   vi.useFakeTimers({ toFake: ['Date'] })
@@ -143,6 +147,79 @@ describe('GET /bookings', () => {
 
     expect(body.map(({ id: found }) => found)).toEqual([second.id])
     expect(body.map(({ id: found }) => found)).not.toContain(first.id)
+  })
+
+  it('filters by a case-insensitive guest-name substring after trimming', async () => {
+    freeze()
+    const instance = await build()
+    const id = await createType(instance, 'Звонок', 30)
+    const first = await book(instance, id, '2026-11-18T06:00:00Z', 'Anna Petrova')
+    const second = await book(instance, id, '2026-11-18T07:00:00Z', 'ANNA')
+    await book(instance, id, '2026-11-18T08:00:00Z', 'Boris')
+
+    const response = await upcomingByGuestName(instance, '  anna  ')
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json<Array<{ id: string }>>()
+    expect(body.map(({ id: found }) => found)).toEqual([first.id, second.id])
+    assertContractResponse(listOperation, response.statusCode, body)
+
+    const noMatch = await upcomingByGuestName(instance, 'Nobody')
+    expect(noMatch.statusCode).toBe(200)
+    expect(noMatch.json()).toEqual([])
+  })
+
+  it('does not narrow the list for an empty or whitespace-only guest name', async () => {
+    freeze()
+    const instance = await build()
+    const id = await createType(instance, 'Звонок', 30)
+    const first = await book(instance, id, '2026-11-18T06:00:00Z', 'Anna')
+    const second = await book(instance, id, '2026-11-18T07:00:00Z', 'Boris')
+
+    for (const guestName of ['', '   ']) {
+      const response = await upcomingByGuestName(instance, guestName)
+      expect(response.statusCode).toBe(200)
+      expect(response.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([
+        first.id,
+        second.id
+      ])
+    }
+  })
+
+  it('rejects a guest name longer than 100 characters after trimming', async () => {
+    freeze()
+    const instance = await build()
+
+    for (const guestName of ['x'.repeat(101), `  ${'x'.repeat(101)}  `]) {
+      const response = await upcomingByGuestName(instance, guestName)
+      expect(response.statusCode).toBe(400)
+      expect(response.json()).toMatchObject({ code: 'VALIDATION_ERROR' })
+      assertContractResponse(listOperation, response.statusCode, response.json())
+    }
+
+    const boundary = await upcomingByGuestName(instance, `  ${'x'.repeat(100)}  `)
+    expect(boundary.statusCode).toBe(200)
+    expect(boundary.json()).toEqual([])
+  })
+
+  it('keeps the end > now rule and stable sorting with an active filter', async () => {
+    freeze('2026-11-17T05:00:00Z')
+    const instance = await build()
+    const id = await createType(instance, 'Звонок', 30)
+    const ongoing = await book(instance, id, '2026-11-18T06:00:00Z', 'Anna')
+    const later = await book(instance, id, '2026-11-18T07:00:00Z', 'Anna')
+    await book(instance, id, '2026-11-18T08:00:00Z', 'Boris')
+
+    vi.setSystemTime(new Date('2026-11-18T06:15:00Z'))
+    const inProgress = await upcomingByGuestName(instance, 'anna')
+    expect(inProgress.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([
+      ongoing.id,
+      later.id
+    ])
+
+    vi.setSystemTime(new Date('2026-11-18T06:30:00Z'))
+    const ended = await upcomingByGuestName(instance, 'anna')
+    expect(ended.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([later.id])
   })
 
   it('rejects unknown query parameters with the contract validation error', async () => {

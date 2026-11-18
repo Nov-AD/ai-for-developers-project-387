@@ -12,10 +12,15 @@ export type SaveBookingInput = {
 
 export type SaveBookingResult = { status: 'saved'; booking: Booking } | { status: 'conflict' }
 
+export type BookingFilters = {
+  /** Case-insensitive substring of the guest name; an empty value does not narrow the list. */
+  guestName?: string
+}
+
 export interface BookingRepository {
   list(): Booking[]
-  /** Bookings whose end is strictly later than `now`, sorted by start, then UUID. */
-  upcoming(now: Date): Booking[]
+  /** Bookings whose end is strictly later than `now` and match every active filter, sorted by start, then UUID. */
+  upcoming(now: Date, filters: BookingFilters): Booking[]
   /**
    * Check every booking of every meeting type and save in one synchronous step: no await
    * between the overlap check and the insert, so concurrent requests cannot both win.
@@ -30,10 +35,12 @@ export class MemoryBookingRepository implements BookingRepository {
     return Array.from(this.bookings.values())
   }
 
-  upcoming(now: Date): Booking[] {
+  upcoming(now: Date, filters: BookingFilters): Booking[] {
     const time = now.getTime()
+    const guestName = filters.guestName?.trim().toLowerCase()
     return this.list()
       .filter((booking) => Date.parse(booking.end) > time)
+      .filter((booking) => !guestName || booking.guestName.toLowerCase().includes(guestName))
       .sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id))
   }
 

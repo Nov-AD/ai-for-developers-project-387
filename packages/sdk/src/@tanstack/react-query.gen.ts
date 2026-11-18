@@ -60,7 +60,13 @@ export const getAvailabilityOptions = (options: Options<GetAvailabilityData>) =>
 export const listUpcomingBookingsQueryKey = (options?: Options<ListUpcomingBookingsData>) => createQueryKey('listUpcomingBookings', options);
 
 /**
- * Return all types' bookings whose end is strictly later than now, including calls already in progress; exclude calls ending exactly now. Recompute now per request. Sort by start ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit time zone. No query parameters. Refresh on owner page entry, focus and manual refresh; no polling required.
+ * Return all types' bookings whose end is strictly later than now, including calls already
+ * in progress; exclude calls ending exactly now. Recompute now per request. Sort by start
+ * ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with an explicit
+ * time zone. Refresh on owner page entry, focus and manual refresh; no polling required.
+ * The optional guestName query parameter trims surrounding whitespace, ignores an empty
+ * value, matches a case-insensitive substring and rejects values longer than 100 characters
+ * after trimming with 400 VALIDATION_ERROR. Unknown query parameters are still rejected.
  */
 export const listUpcomingBookingsOptions = (options?: Options<ListUpcomingBookingsData>) => queryOptions<ListUpcomingBookingsResponse, ListUpcomingBookingsError, ListUpcomingBookingsResponse, ReturnType<typeof listUpcomingBookingsQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
