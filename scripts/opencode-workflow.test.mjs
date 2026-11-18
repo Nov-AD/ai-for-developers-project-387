@@ -20,20 +20,13 @@ test('manual agent shell receives an Issues-write token without changing App aut
   assert.match(workflow, /is_fork.*!= "false"/)
 })
 
-test('CI permission policy rejects credential-directory access rather than waiting for approval', () => {
+test('GitHub Action receives a V1 policy that rejects approvals without V2-only fields', () => {
   const content = runStep.match(/OPENCODE_CONFIG_CONTENT: >-\n((?: {12}.*\n)+)/)?.[1]
   assert.ok(content, 'Run OpenCode must receive an inline CI policy')
   const config = JSON.parse(content)
-  assert.ok(
-    config.permissions.some(
-      (rule) =>
-        rule.action === 'external_directory' && rule.resource === '*' && rule.effect === 'deny'
-    )
-  )
-  assert.ok(
-    config.permissions.some(
-      (rule) => rule.action === 'read' && rule.resource === '*.env' && rule.effect === 'deny'
-    )
-  )
-  assert.ok(config.permissions.every((rule) => rule.effect === 'deny'))
+  assert.equal(config.permissions, undefined, 'The GitHub Action installs V1, not V2')
+  assert.deepEqual(config.permission, {
+    external_directory: 'deny',
+    read: { '*.env': 'deny', '*.env.*': 'deny' }
+  })
 })
