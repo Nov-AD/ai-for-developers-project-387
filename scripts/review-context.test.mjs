@@ -58,6 +58,7 @@ if (args[0] === 'debug') {
   const files = paths.map(path => readFileSync(path, 'utf8'))
   writeFileSync(${JSON.stringify(capture)}, JSON.stringify({args, paths, files, token: process.env.GH_TOKEN}))
   console.log(JSON.stringify({type: 'text', part: {text: JSON.stringify({summary: 'Проверено.', findings: []})}}))
+  console.log(JSON.stringify({type: 'step_finish', part: {reason: 'stop'}}))
 }
 `
     )
@@ -84,6 +85,7 @@ if (args[0] === 'debug') {
     assert.equal(captured.token, undefined)
     assert.ok(captured.paths.every((path) => !existsSync(path)))
     assert.match(readFileSync(output, 'utf8'), /reason=success/u)
+    assert.ok(!existsSync(join(temp, 'review-diagnostics.json')))
   } finally {
     rmSync(temp, { recursive: true, force: true })
   }

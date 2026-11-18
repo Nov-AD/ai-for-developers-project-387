@@ -15,9 +15,20 @@ import { githubClient, modelEnvironment } from './auto-triage.mjs'
 import { inspectBudget, renderAgentResult } from './agent-budget.mjs'
 import { agentFailureReason } from './run-manual-agent.mjs'
 import { compactReviewContext, reviewContextParts } from './review-context.mjs'
+import { writeReviewDiagnostics } from './review-diagnostics.mjs'
 
 const trusted = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
 const actions = new Set(['opened', 'synchronize', 'reopened', 'ready_for_review'])
+const reviewFailures = {
+  invalid_response: 'Ревью не завершено: модель не вернула JSON по схеме ревью.',
+  incomplete_response: 'Ревью не завершено: нет подтверждения полного ответа модели.',
+  invalid_stream: 'Ревью не завершено: повреждён поток событий CLI.',
+  runtime_error: 'Ревью не завершено: CLI сообщил об ошибке модели.'
+}
+
+function reviewFailure(code) {
+  return Object.assign(new Error(reviewFailures[code]), { code })
+}
 
 export function reviewSkipReason(repository, event, pr) {
   if (!actions.has(event.action)) return 'unsupported event'
@@ -211,13 +222,37 @@ export function patchLines(patch = '', removed = false) {
   return lines
 }
 
+function reviewEvents(output) {
+  try {
+    const events = output
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+    assert.ok(events.every((event) => event && typeof event.type === 'string'))
+    return events
+  } catch {
+    throw reviewFailure('invalid_stream')
+  }
+}
+
 export function reviewFromEvents(output, files) {
-  const events = output
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line))
-  assert.ok(!events.some((event) => event.type === 'error'), 'model reported an error')
-  return parseReview(events.findLast((event) => event.type === 'text')?.part?.text, files)
+  const events = reviewEvents(output)
+  if (events.some((event) => event.type === 'error')) throw reviewFailure('runtime_error')
+  const text = events.findLast((event) => event.type === 'text')?.part
+  const finish = events.at(-1)
+  if (
+    !text ||
+    finish.type !== 'step_finish' ||
+    finish.part?.reason !== 'stop' ||
+    finish.part.messageID !== text.messageID
+  ) {
+    throw reviewFailure('incomplete_response')
+  }
+  try {
+    return parseReview(text.text, files)
+  } catch {
+    throw reviewFailure('invalid_response')
+  }
 }
 
 export function validateReviewPolicy(agents) {
@@ -342,18 +377,26 @@ async function main() {
     assert.equal(process.env.REVIEW_CRITERIA, 'REVIEW.md', 'trusted REVIEW.md must be supplied')
     const criteria = readFileSync('REVIEW.md', 'utf8')
     const result = runReview(executable, options, input, criteria)
-    output(
-      'reason',
-      agentFailureReason(
-        result.error?.code === 'ETIMEDOUT',
-        result.error,
-        result.status,
-        result.stderr ?? ''
-      )
+    const reason = agentFailureReason(
+      result.error?.code === 'ETIMEDOUT',
+      result.error,
+      result.status,
+      result.stderr ?? ''
     )
-    assert.equal(result.status, 0, 'OpenCode failed or timed out; no fallback model will be used')
-    output('reason', 'agent_failed')
-    output('proposal', JSON.stringify(reviewFromEvents(result.stdout, input.files)))
+    output('reason', reason === 'success' ? 'agent_failed' : reason)
+    if (reason !== 'success') {
+      writeReviewDiagnostics(join(temp, 'review-diagnostics.json'), result, reason)
+      throw new Error('OpenCode failed or timed out; no fallback model will be used')
+    }
+    let review
+    try {
+      review = reviewFromEvents(result.stdout, input.files)
+    } catch (error) {
+      output('review_failure', error.code)
+      writeReviewDiagnostics(join(temp, 'review-diagnostics.json'), result, error.code)
+      throw error
+    }
+    output('proposal', JSON.stringify(review))
     output('reason', 'success')
     return
   }
@@ -393,14 +436,23 @@ async function main() {
     if (process.env.REVIEW_REASON === 'skipped') return
     const pr = await api('GET', `repos/${repository}/pulls/${event.number}`)
     await api('POST', `repos/${repository}/issues/${event.number}/comments`, {
-      body: renderAgentResult({
-        reason: ['limit_exhausted', 'timeout', 'agent_failed'].includes(process.env.REVIEW_REASON)
-          ? process.env.REVIEW_REASON
-          : 'infra',
-        sha: pr.head.sha,
-        requests: process.env.REVIEW_REQUESTS,
-        url: `https://github.com/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}/attempts/${process.env.GITHUB_RUN_ATTEMPT}`
-      })
+      body: [
+        renderAgentResult({
+          reason: ['limit_exhausted', 'timeout', 'agent_failed'].includes(process.env.REVIEW_REASON)
+            ? process.env.REVIEW_REASON
+            : 'infra',
+          sha: pr.head.sha,
+          requests: process.env.REVIEW_REQUESTS,
+          url: `https://github.com/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}/attempts/${process.env.GITHUB_RUN_ATTEMPT}`
+        }),
+        ...(Object.hasOwn(reviewFailures, process.env.REVIEW_FAILURE)
+          ? [
+              '',
+              reviewFailures[process.env.REVIEW_FAILURE],
+              'Результат ревью не опубликован. Диагностика — в артефакте review-failure этого запуска, если он сохранён.'
+            ]
+          : [])
+      ].join('\n')
     })
     return
   }
