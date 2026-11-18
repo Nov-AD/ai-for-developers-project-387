@@ -377,11 +377,50 @@ test('strict review output schema and patch coordinates reject arbitrary actions
 test('only final valid CLI text becomes review; runtime errors fail closed', () => {
   const events = [
     JSON.stringify({ type: 'text', part: { text: 'Reading...' } }),
-    JSON.stringify({ type: 'text', part: { text: raw } })
+    JSON.stringify({ type: 'text', part: { text: raw } }),
+    JSON.stringify({ type: 'step_finish', part: { reason: 'stop' } })
   ].join('\n')
   assert.deepEqual(reviewFromEvents(events, files), review)
   assert.throws(() => reviewFromEvents(events + '\n{"type":"error"}', files))
   assert.throws(() => reviewFromEvents('{"type":"tool_use"}', files))
+})
+
+test('plain-text model response reports an unfinished review without leaking its contents', () => {
+  const events = [
+    { type: 'text', part: { text: 'Максимальное число шагов. secret-value' } },
+    { type: 'step_finish', part: { reason: 'stop' } }
+  ]
+    .map((entry) => JSON.stringify(entry))
+    .join('\n')
+  assert.throws(() => reviewFromEvents(events, files), {
+    code: 'invalid_response',
+    message: 'Ревью не завершено: модель не вернула JSON по схеме ревью.'
+  })
+})
+
+test('even valid JSON is rejected when the final CLI step is missing, cut off or unfinished', () => {
+  const text = { type: 'text', part: { text: raw, messageID: 'final' } }
+  const finish = { type: 'step_finish', part: { reason: 'stop', messageID: 'final' } }
+  const stream = (events) => events.map((entry) => JSON.stringify(entry)).join('\n')
+  assert.deepEqual(reviewFromEvents(stream([text, finish]), files), review)
+  for (const events of [
+    [text],
+    [text, finish, { type: 'step_start' }],
+    [text, finish, { type: 'text', part: { text: '{"summary":' } }],
+    [text, { ...finish, part: { reason: 'stop', messageID: 'other' } }],
+    ...['length', 'tool-calls', 'content-filter', 'error', 'unknown', undefined].map((reason) => [
+      text,
+      { ...finish, part: { reason, messageID: 'final' } }
+    ])
+  ]) {
+    assert.throws(() => reviewFromEvents(stream(events), files), { code: 'incomplete_response' })
+  }
+  for (const output of ['', 'null', stream([text, finish]) + '\n{"type":']) {
+    assert.throws(() => reviewFromEvents(output, files), { code: 'invalid_stream' })
+  }
+  assert.throws(() => reviewFromEvents(stream([text, finish, { type: 'error' }]), files), {
+    code: 'runtime_error'
+  })
 })
 
 test('publisher comments only on triggering PR; changed, stale, closed and duplicate results are skipped', async () => {
@@ -550,4 +589,10 @@ test('workflow separates review from write token, uses CLI not github run, never
   assert.match(workflow, /OPENCODE_AUTO_REVIEW != 'off'/)
   assert.match(workflow, /REVIEW_CRITERIA: REVIEW\.md/)
   assert.match(workflow, /oc-budget-v1:pr:/)
+  assert.match(analysis, /review_failure: \$\{\{ steps\.analysis\.outputs\.review_failure \}\}/u)
+  assert.match(analysis, /if: failure\(\) && steps\.analysis\.outcome == 'failure'/u)
+  assert.match(analysis, /actions\/upload-artifact@[a-f0-9]{40}/u)
+  assert.match(analysis, /path: \$\{\{ runner\.temp \}\}\/review-diagnostics\.json/u)
+  assert.match(analysis, /retention-days: 7/u)
+  assert.match(publication, /REVIEW_FAILURE: \$\{\{ needs\.analyze\.outputs\.review_failure \}\}/u)
 })

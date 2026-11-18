@@ -49,6 +49,7 @@ jobs:
       proposal: ${{ steps.analysis.outputs.proposal }}
       fingerprint: ${{ steps.prepare.outputs.fingerprint }}
       reason: ${{ steps.analysis.outputs.reason || steps.prepare.outputs.reason }}
+      review_failure: ${{ steps.analysis.outputs.review_failure }}
       requests: ${{ steps.prepare.outputs.requests }}
     steps:
       - name: Checkout trusted reviewer, never PR code
@@ -87,6 +88,15 @@ jobs:
           REVIEW_CRITERIA: REVIEW.md
         run: node scripts/pr-review.mjs analyze
 
+      - name: Preserve redacted review failure diagnostics
+        if: failure() && steps.analysis.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr-${{ github.event.pull_request.number }}-review-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/review-diagnostics.json
+          if-no-files-found: warn
+          retention-days: 7
+
   publish:
     needs: analyze
     if: always() && needs.analyze.result != 'skipped'
@@ -108,6 +118,7 @@ jobs:
           REVIEW_PROPOSAL: ${{ needs.analyze.outputs.proposal }}
           REVIEW_FINGERPRINT: ${{ needs.analyze.outputs.fingerprint }}
           REVIEW_REASON: ${{ needs.analyze.outputs.reason }}
+          REVIEW_FAILURE: ${{ needs.analyze.outputs.review_failure }}
           REVIEW_REQUESTS: ${{ needs.analyze.outputs.requests }}
         run: |
           if [[ -n "$REVIEW_PROPOSAL" ]]; then
