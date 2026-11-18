@@ -342,8 +342,11 @@ value, matches a case-insensitive substring and rejects values longer than 100 c
 after trimming with 400 VALIDATION_ERROR. The optional meetingTypeId query parameter
 narrows the list to bookings of one type; a malformed UUID is 400 VALIDATION_ERROR,
 while a well-formed UUID with no matching type is still 200 [] because this is a filter,
-not a lookup of one type. All active filters combine with AND. Unknown query parameters
-are still rejected.
+not a lookup of one type. The optional fromDate and toDate query parameters are inclusive
+YYYY-MM-DD calendar-date bounds for a booking's start in Europe/Moscow, not UTC or the
+browser zone; either bound may be supplied alone. Empty date strings, malformed dates and
+fromDate later than toDate are 400 VALIDATION_ERROR. All active filters combine with AND.
+Unknown query parameters are still rejected.
 """)
 @route("/bookings")
 @get
@@ -352,6 +355,8 @@ are still rejected.
 @opExample(#{parameters: #{guestName: "Alex"}, returnType: #[exampleBooking]}, #{title: "Filtered by guest name"})
 @opExample(#{parameters: #{meetingTypeId: exampleTypeId}, returnType: #[exampleBooking]}, #{title: "Filtered by meeting type"})
 @opExample(#{parameters: #{guestName: "Alex", meetingTypeId: exampleTypeId}, returnType: #[exampleBooking]}, #{title: "Filtered by guest name and meeting type"})
+@opExample(#{parameters: #{fromDate: "2026-11-18", toDate: "2026-11-18"}, returnType: #[exampleBooking]}, #{title: "Filtered by inclusive date range"})
+@opExample(#{parameters: #{fromDate: "2026-11-19"}, returnType: #[]}, #{title: "Filtered from a later date"})
 @opExample(#{returnType: #{statusCode: 400, body: #{code: "VALIDATION_ERROR", message: "Проверьте параметры запроса."}}})
 @extension("x-contract-scenarios", #[
   #{name: "empty", status: 200, body: #[]},
@@ -362,6 +367,18 @@ are still rejected.
   #{name: "empty-filter", request: #{query: #{guestName: "   "}}, status: 200, body: #[exampleBooking]},
   #{name: "filtered-by-type", request: #{query: #{meetingTypeId: exampleTypeId}}, status: 200, body: #[exampleBooking]},
   #{name: "filtered-by-type-and-name", request: #{query: #{meetingTypeId: exampleTypeId, guestName: "Alex"}}, status: 200, body: #[exampleBooking]},
+  #{name: "filtered-from-date", request: #{query: #{fromDate: "2026-11-18"}}, status: 200, body: #[exampleBooking]},
+  #{name: "filtered-to-date", request: #{query: #{toDate: "2026-11-18"}}, status: 200, body: #[exampleBooking]},
+  #{name: "filtered-date-range", request: #{query: #{fromDate: "2026-11-18", toDate: "2026-11-18"}}, status: 200, body: #[exampleBooking]},
+  #{name: "filtered-by-date-and-name", request: #{query: #{guestName: "Alex", fromDate: "2026-11-18", toDate: "2026-11-18"}}, status: 200, body: #[exampleBooking]},
+  #{name: "filtered-by-all-filters", request: #{query: #{meetingTypeId: exampleTypeId, guestName: "Alex", fromDate: "2026-11-18", toDate: "2026-11-18"}}, status: 200, body: #[exampleBooking]},
+  #{name: "filtered-date-empty", request: #{query: #{fromDate: "2026-11-19", toDate: "2026-11-19"}}, status: 200, body: #[]},
+  #{name: "empty-date-filter", request: #{query: #{fromDate: ""}}, requestValid: false,
+    status: 400, body: #{code: "VALIDATION_ERROR", message: "Проверьте параметры запроса."}},
+  #{name: "malformed-date-filter", request: #{query: #{fromDate: "18.11.2026"}}, requestValid: false,
+    status: 400, body: #{code: "VALIDATION_ERROR", message: "Проверьте параметры запроса."}},
+  #{name: "reversed-date-range", request: #{query: #{fromDate: "2026-11-19", toDate: "2026-11-18"}},
+    status: 400, body: #{code: "VALIDATION_ERROR", message: "Проверьте параметры запроса."}},
   #{name: "unknown-type-filter", request: #{query: #{meetingTypeId: "99999999-9999-4999-8999-999999999999"}}, status: 200, body: #[]},
   #{name: "too-long-filter", request: #{query: #{guestName: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, requestValid: false,
     status: 400, body: #{code: "VALIDATION_ERROR", message: "Проверьте параметры запроса."}},
@@ -372,5 +389,7 @@ are still rejected.
 ])
 op listUpcomingBookings(
   @doc("Optional guest name filter; case-insensitive substring after trimming. Empty value disables the filter.") @query guestName?: GuestNameFilter,
-  @doc("Optional meeting type filter; malformed UUID is 400, unknown well-formed UUID is 200 [].") @query meetingTypeId?: Uuid
+  @doc("Optional meeting type filter; malformed UUID is 400, unknown well-formed UUID is 200 [].") @query meetingTypeId?: Uuid,
+  @doc("Optional inclusive lower bound for the booking start's calendar date in Europe/Moscow; empty or malformed dates are 400.") @query fromDate?: OwnerDate,
+  @doc("Optional inclusive upper bound for the booking start's calendar date in Europe/Moscow; empty or malformed dates are 400, and fromDate > toDate is 400.") @query toDate?: OwnerDate
 ): Booking[] | BadRequest;

@@ -27,6 +27,8 @@ export function UpcomingBookings() {
   const [guestNameInput, setGuestNameInput] = useState('')
   const [guestNameFilter, setGuestNameFilter] = useState('')
   const [meetingTypeId, setMeetingTypeId] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -38,14 +40,17 @@ export function UpcomingBookings() {
   // The same query key as the meeting types block, so both share one cached request.
   const meetingTypes = useQuery({ ...listMeetingTypesOptions(), retry: false })
 
-  const hasActiveFilters = guestNameFilter !== '' || meetingTypeId !== ''
+  const hasActiveFilters =
+    guestNameFilter !== '' || meetingTypeId !== '' || fromDate !== '' || toDate !== ''
   const upcoming = useQuery({
     ...listUpcomingBookingsOptions(
       hasActiveFilters
         ? {
             query: {
               ...(guestNameFilter ? { guestName: guestNameFilter } : {}),
-              ...(meetingTypeId ? { meetingTypeId } : {})
+              ...(meetingTypeId ? { meetingTypeId } : {}),
+              ...(fromDate ? { fromDate } : {}),
+              ...(toDate ? { toDate } : {})
             }
           }
         : undefined
@@ -63,6 +68,8 @@ export function UpcomingBookings() {
     setGuestNameInput('')
     setGuestNameFilter('')
     setMeetingTypeId('')
+    setFromDate('')
+    setToDate('')
   }
 
   return (
@@ -106,6 +113,32 @@ export function UpcomingBookings() {
               </option>
             ))}
           </select>
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="upcoming-from-date" className="block text-sm font-medium">
+            Дата с
+          </label>
+          <input
+            id="upcoming-from-date"
+            name="fromDate"
+            type="date"
+            value={fromDate}
+            onChange={(event) => setFromDate(event.target.value)}
+            className="rounded-md border bg-background px-3 py-2 focus-visible:outline-2 focus-visible:outline-ring"
+          />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="upcoming-to-date" className="block text-sm font-medium">
+            Дата по
+          </label>
+          <input
+            id="upcoming-to-date"
+            name="toDate"
+            type="date"
+            value={toDate}
+            onChange={(event) => setToDate(event.target.value)}
+            className="rounded-md border bg-background px-3 py-2 focus-visible:outline-2 focus-visible:outline-ring"
+          />
         </div>
         <Button type="button" variant="outline" onClick={resetFilters}>
           Сбросить фильтры

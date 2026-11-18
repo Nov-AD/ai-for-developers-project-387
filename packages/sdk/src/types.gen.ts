@@ -300,6 +300,14 @@ export type ListUpcomingBookingsData = {
          * Optional meeting type filter; malformed UUID is 400, unknown well-formed UUID is 200 [].
          */
         meetingTypeId?: Uuid;
+        /**
+         * Optional inclusive lower bound for the booking start's calendar date in Europe/Moscow; empty or malformed dates are 400.
+         */
+        fromDate?: OwnerDate;
+        /**
+         * Optional inclusive upper bound for the booking start's calendar date in Europe/Moscow; empty or malformed dates are 400, and fromDate > toDate is 400.
+         */
+        toDate?: OwnerDate;
     };
     url: '/bookings';
 };

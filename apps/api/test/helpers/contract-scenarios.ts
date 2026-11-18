@@ -17,7 +17,13 @@ export async function prepareContractScenario(
     'trimmed-filter',
     'empty-filter',
     'filtered-by-type',
-    'filtered-by-type-and-name'
+    'filtered-by-type-and-name',
+    'filtered-from-date',
+    'filtered-to-date',
+    'filtered-date-range',
+    'filtered-by-date-and-name',
+    'filtered-by-all-filters',
+    'filtered-date-empty'
   ]
   const needsType =
     (operationId === 'listMeetingTypes' && scenario.name === 'populated') ||
@@ -60,8 +66,13 @@ export async function prepareContractScenario(
     const requestedGuestName =
       typeof request.query?.guestName === 'string' ? request.query.guestName.trim() : ''
     const guestName =
-      ['filtered', 'trimmed-filter', 'filtered-by-type-and-name'].includes(scenario.name) &&
-      requestedGuestName
+      [
+        'filtered',
+        'trimmed-filter',
+        'filtered-by-type-and-name',
+        'filtered-by-date-and-name',
+        'filtered-by-all-filters'
+      ].includes(scenario.name) && requestedGuestName
         ? requestedGuestName
         : 'Example guest'
     await seedBooking('2026-11-18T06:00:00Z', guestName)

@@ -453,6 +453,88 @@ describe('Owner upcoming bookings', () => {
     expect(input).toHaveValue('Анна')
   })
 
+  it('labels both date controls and sends each bound immediately', async () => {
+    const fetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/meeting-types') return meetingTypesResponse('empty')
+      if (url.pathname === '/bookings') {
+        return url.searchParams.has('fromDate') || url.searchParams.has('toDate')
+          ? upcomingResponse('populated', [firstBooking])
+          : upcomingResponse('populated', [firstBooking, secondBooking])
+      }
+      throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderOwner()
+
+    const fromDate = await screen.findByLabelText('Дата с')
+    const toDate = await screen.findByLabelText('Дата по')
+    expect(fromDate).toHaveAccessibleName('Дата с')
+    expect(toDate).toHaveAccessibleName('Дата по')
+    await screen.findByText('Борис')
+
+    const beforeFrom = bookingCalls(fetch).length
+    fireEvent.change(fromDate, { target: { value: '2026-11-18' } })
+
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(beforeFrom), {
+      timeout: MEETING_TYPE_FILTER_IMMEDIATE_MS
+    })
+    const fromRequest = new URL((bookingCalls(fetch).at(-1)![0] as Request).url).searchParams
+    expect(fromRequest.get('fromDate')).toBe('2026-11-18')
+    expect(fromRequest.has('toDate')).toBe(false)
+    await waitFor(() => expect(screen.queryByText('Борис')).not.toBeInTheDocument())
+
+    const beforeTo = bookingCalls(fetch).length
+    fireEvent.change(toDate, { target: { value: '2026-11-19' } })
+
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(beforeTo), {
+      timeout: MEETING_TYPE_FILTER_IMMEDIATE_MS
+    })
+    const bothRequest = new URL((bookingCalls(fetch).at(-1)![0] as Request).url).searchParams
+    expect(bothRequest.get('fromDate')).toBe('2026-11-18')
+    expect(bothRequest.get('toDate')).toBe('2026-11-19')
+    expect(fromDate).toHaveValue('2026-11-18')
+    expect(toDate).toHaveValue('2026-11-19')
+  })
+
+  it('clears both dates and immediately requests the full list on reset', async () => {
+    const fetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/meeting-types') return meetingTypesResponse('empty')
+      if (url.pathname === '/bookings') {
+        return url.searchParams.has('fromDate') || url.searchParams.has('toDate')
+          ? upcomingResponse('populated', [firstBooking])
+          : upcomingResponse('populated', [firstBooking, secondBooking])
+      }
+      throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderOwner()
+
+    const fromDate = await screen.findByLabelText('Дата с')
+    const toDate = await screen.findByLabelText('Дата по')
+    await screen.findByText('Борис')
+    fireEvent.change(fromDate, { target: { value: '2026-11-18' } })
+    fireEvent.change(toDate, { target: { value: '2026-11-19' } })
+    await waitFor(() => {
+      const params = new URL((bookingCalls(fetch).at(-1)![0] as Request).url).searchParams
+      expect(params.get('fromDate')).toBe('2026-11-18')
+      expect(params.get('toDate')).toBe('2026-11-19')
+    })
+    await waitFor(() => expect(screen.queryByText('Борис')).not.toBeInTheDocument())
+    const before = bookingCalls(fetch).length
+
+    fireEvent.click(screen.getByRole('button', { name: 'Сбросить фильтры' }))
+
+    expect(fromDate).toHaveValue('')
+    expect(toDate).toHaveValue('')
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(before))
+    const request = new URL((bookingCalls(fetch).at(-1)![0] as Request).url).searchParams
+    expect(request.has('fromDate')).toBe(false)
+    expect(request.has('toDate')).toBe(false)
+    expect(await screen.findByText('Борис')).toBeInTheDocument()
+  })
+
   it('refreshes the list when the window regains visibility without polling', async () => {
     const fetch = mockOwner((attempt) =>
       attempt === 1
