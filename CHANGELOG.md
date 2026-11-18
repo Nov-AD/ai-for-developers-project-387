@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/Nov-AD/ai-for-developers-project-387/compare/v0.4.0...v0.5.0) (2026-11-18)
+
+
+### Features
+
+* filter upcoming bookings by meeting type ([#20](https://github.com/Nov-AD/ai-for-developers-project-387/issues/20)) ([fe93cb1](https://github.com/Nov-AD/ai-for-developers-project-387/commit/fe93cb14b063564b211fe4d4d155fed67b5f86c3))
+
 ## [0.4.0](https://github.com/Nov-AD/ai-for-developers-project-387/compare/v0.3.3...v0.4.0) (2026-11-18)
 
 
