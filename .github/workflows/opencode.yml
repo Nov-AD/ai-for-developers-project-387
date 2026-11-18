@@ -84,11 +84,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
           GH_PROMPT_DISABLED: "1"
           # There is no interactive client to answer filesystem approval requests.
+          # This GitHub Action installs V1: its policy must use singular "permission".
           OPENCODE_CONFIG_CONTENT: >-
-            {"$schema":"https://opencode.ai/config.json","permissions":[
-            {"action":"external_directory","resource":"*","effect":"deny"},
-            {"action":"read","resource":"*.env","effect":"deny"},
-            {"action":"read","resource":"*.env.*","effect":"deny"}]}
+            {"$schema":"https://opencode.ai/config.json","permission":{
+            "external_directory":"deny",
+            "read":{"*.env":"deny","*.env.*":"deny"}}}
         with:
           model: opencode/deepseek-v4.1-flash-free
           mentions: /opencode,/oc
