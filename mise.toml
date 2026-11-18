@@ -98,7 +98,7 @@ run = "pnpm secrets"
 
 [tasks.audit]
 description = "Scan dependencies for known vulnerabilities"
-run = "pnpm audit"
+run = "pnpm run audit"
 
 # The single entry point for local checks, Git hooks and CI.
 # It installs dependencies, then runs every hermetic check in order.
