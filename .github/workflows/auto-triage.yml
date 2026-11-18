@@ -1,0 +1,80 @@
+name: Auto triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions: {}
+
+# Share the lock with manual /oc runs for the same discussion.
+concurrency:
+  group: opencode-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    if: |
+      vars.OPENCODE_AUTO_TRIAGE != 'off' &&
+      github.event.issue.user.type == 'User' &&
+      github.event.sender.type == 'User' &&
+      !endsWith(github.event.issue.user.login, '[bot]') &&
+      !github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      proposal: ${{ steps.analysis.outputs.proposal }}
+      fingerprint: ${{ steps.prepare.outputs.fingerprint }}
+    steps:
+      - name: Checkout trusted instructions and code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Filter new requests
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/auto-triage.mjs prepare
+
+      - name: Set up Node
+        if: steps.prepare.outputs.allowed == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.11.1'
+
+      - name: Install locked OpenCode V2 CLI
+        if: steps.prepare.outputs.allowed == 'true'
+        run: npm ci --prefix .github/auto-triage
+
+      - name: Analyze without a GitHub token or write tools
+        id: analysis
+        if: steps.prepare.outputs.allowed == 'true'
+        env:
+          TRIAGE_CLI: ${{ github.workspace }}/.github/auto-triage/node_modules/.bin/opencode
+        run: node scripts/auto-triage.mjs analyze
+
+  publish:
+    needs: analyze
+    if: needs.analyze.outputs.proposal != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout trusted publisher
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Validate and publish only to the triggering issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIAGE_PROPOSAL: ${{ needs.analyze.outputs.proposal }}
+          TRIAGE_FINGERPRINT: ${{ needs.analyze.outputs.fingerprint }}
+        run: node scripts/auto-triage.mjs publish
