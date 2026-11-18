@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.1](https://github.com/Nov-AD/ai-for-developers-project-387/compare/v0.3.0...v0.3.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* prevent OpenCode ticket publication hangs ([#14](https://github.com/Nov-AD/ai-for-developers-project-387/issues/14)) ([e09bc39](https://github.com/Nov-AD/ai-for-developers-project-387/commit/e09bc39702f923e8d1ddd8eb3df783261c752c27))
+* use V1 permissions in OpenCode GitHub Action ([#17](https://github.com/Nov-AD/ai-for-developers-project-387/issues/17)) ([4ef9cb1](https://github.com/Nov-AD/ai-for-developers-project-387/commit/4ef9cb1cf2619c64627e3a92ef219eb59b505877))
+* совместимая политика прав для OpenCode GitHub Action ([#17](https://github.com/Nov-AD/ai-for-developers-project-387/issues/17)) ([c6549a5](https://github.com/Nov-AD/ai-for-developers-project-387/commit/c6549a52db1e8d7a53d4d8f648e5daeefd6d2a55))
+* устранить зависание OpenCode при публикации тикетов ([#14](https://github.com/Nov-AD/ai-for-developers-project-387/issues/14)) ([f18147b](https://github.com/Nov-AD/ai-for-developers-project-387/commit/f18147b4a17d5548c13da1f82755ee9405e1429e))
+
 ## [0.3.0](https://github.com/Nov-AD/ai-for-developers-project-387/compare/v0.2.1...v0.3.0) (2026-11-18)
 
 
