@@ -35,7 +35,11 @@ export interface paths {
          *     time zone. Refresh on owner page entry, focus and manual refresh; no polling required.
          *     The optional guestName query parameter trims surrounding whitespace, ignores an empty
          *     value, matches a case-insensitive substring and rejects values longer than 100 characters
-         *     after trimming with 400 VALIDATION_ERROR. Unknown query parameters are still rejected.
+         *     after trimming with 400 VALIDATION_ERROR. The optional meetingTypeId query parameter
+         *     narrows the list to bookings of one type; a malformed UUID is 400 VALIDATION_ERROR,
+         *     while a well-formed UUID with no matching type is still 200 [] because this is a filter,
+         *     not a lookup of one type. All active filters combine with AND. Unknown query parameters
+         *     are still rejected.
          */
         get: operations["listUpcomingBookings"];
         put?: never;
@@ -428,6 +432,8 @@ export interface operations {
             query?: {
                 /** @description Optional guest name filter; case-insensitive substring after trimming. Empty value disables the filter. */
                 guestName?: components["schemas"]["GuestNameFilter"];
+                /** @description Optional meeting type filter; malformed UUID is 400, unknown well-formed UUID is 200 []. */
+                meetingTypeId?: components["schemas"]["Uuid"];
             };
             header?: never;
             path?: never;

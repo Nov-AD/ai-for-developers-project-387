@@ -127,7 +127,16 @@ describe('API contract', () => {
         if (operation.operationId === 'getAvailability') expect(body).toMatchObject({ slots: [] })
         else expect(body).toEqual([])
       }
-      if (['populated', 'filtered', 'trimmed-filter', 'empty-filter'].includes(scenario.name)) {
+      if (
+        [
+          'populated',
+          'filtered',
+          'trimmed-filter',
+          'empty-filter',
+          'filtered-by-type',
+          'filtered-by-type-and-name'
+        ].includes(scenario.name)
+      ) {
         expect(body).toHaveLength(1)
       }
       if (scenario.name === 'filtered-empty') expect(body).toEqual([])

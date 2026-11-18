@@ -30,7 +30,11 @@ export const getAvailability = <ThrowOnError extends boolean = false>(options: O
  * time zone. Refresh on owner page entry, focus and manual refresh; no polling required.
  * The optional guestName query parameter trims surrounding whitespace, ignores an empty
  * value, matches a case-insensitive substring and rejects values longer than 100 characters
- * after trimming with 400 VALIDATION_ERROR. Unknown query parameters are still rejected.
+ * after trimming with 400 VALIDATION_ERROR. The optional meetingTypeId query parameter
+ * narrows the list to bookings of one type; a malformed UUID is 400 VALIDATION_ERROR,
+ * while a well-formed UUID with no matching type is still 200 [] because this is a filter,
+ * not a lookup of one type. All active filters combine with AND. Unknown query parameters
+ * are still rejected.
  */
 export const listUpcomingBookings = <ThrowOnError extends boolean = false>(options?: Options<ListUpcomingBookingsData, ThrowOnError>): RequestResult<ListUpcomingBookingsResponses, ListUpcomingBookingsErrors, ThrowOnError> => (options?.client ?? client).get<ListUpcomingBookingsResponses, ListUpcomingBookingsErrors, ThrowOnError>({ url: '/bookings', ...options });
 

@@ -1,4 +1,4 @@
-import { listUpcomingBookingsOptions, type Booking } from '@calendar/sdk'
+import { listMeetingTypesOptions, listUpcomingBookingsOptions, type Booking } from '@calendar/sdk'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,7 @@ function BookingItem({ booking }: { booking: Booking }) {
 export function UpcomingBookings() {
   const [guestNameInput, setGuestNameInput] = useState('')
   const [guestNameFilter, setGuestNameFilter] = useState('')
+  const [meetingTypeId, setMeetingTypeId] = useState('')
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -34,10 +35,20 @@ export function UpcomingBookings() {
     return () => clearTimeout(timer)
   }, [guestNameInput])
 
-  const hasActiveFilters = guestNameFilter !== ''
+  // The same query key as the meeting types block, so both share one cached request.
+  const meetingTypes = useQuery({ ...listMeetingTypesOptions(), retry: false })
+
+  const hasActiveFilters = guestNameFilter !== '' || meetingTypeId !== ''
   const upcoming = useQuery({
     ...listUpcomingBookingsOptions(
-      hasActiveFilters ? { query: { guestName: guestNameFilter } } : undefined
+      hasActiveFilters
+        ? {
+            query: {
+              ...(guestNameFilter ? { guestName: guestNameFilter } : {}),
+              ...(meetingTypeId ? { meetingTypeId } : {})
+            }
+          }
+        : undefined
     ),
     // Refresh on page entry and window focus; the button below covers a manual refresh.
     refetchOnWindowFocus: true,
@@ -51,6 +62,7 @@ export function UpcomingBookings() {
   function resetFilters() {
     setGuestNameInput('')
     setGuestNameFilter('')
+    setMeetingTypeId('')
   }
 
   return (
@@ -75,6 +87,25 @@ export function UpcomingBookings() {
             onChange={(event) => setGuestNameInput(event.target.value)}
             className="rounded-md border bg-background px-3 py-2 focus-visible:outline-2 focus-visible:outline-ring"
           />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="upcoming-meeting-type" className="block text-sm font-medium">
+            Тип встречи
+          </label>
+          <select
+            id="upcoming-meeting-type"
+            name="meetingTypeId"
+            value={meetingTypeId}
+            onChange={(event) => setMeetingTypeId(event.target.value)}
+            className="rounded-md border bg-background px-3 py-2 focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            <option value="">Все типы</option>
+            {meetingTypes.data?.map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+          </select>
         </div>
         <Button type="button" variant="outline" onClick={resetFilters}>
           Сбросить фильтры

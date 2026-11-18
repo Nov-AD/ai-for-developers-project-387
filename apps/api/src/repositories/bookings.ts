@@ -15,6 +15,8 @@ export type SaveBookingResult = { status: 'saved'; booking: Booking } | { status
 export type BookingFilters = {
   /** Case-insensitive substring of the guest name; an empty value does not narrow the list. */
   guestName?: string
+  /** Meeting type identifier; a value that matches no booking yields an empty list. */
+  meetingTypeId?: string
 }
 
 export interface BookingRepository {
@@ -38,9 +40,11 @@ export class MemoryBookingRepository implements BookingRepository {
   upcoming(now: Date, filters: BookingFilters): Booking[] {
     const time = now.getTime()
     const guestName = filters.guestName?.trim().toLowerCase()
+    const meetingTypeId = filters.meetingTypeId
     return this.list()
       .filter((booking) => Date.parse(booking.end) > time)
       .filter((booking) => !guestName || booking.guestName.toLowerCase().includes(guestName))
+      .filter((booking) => !meetingTypeId || booking.meetingType.id === meetingTypeId)
       .sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id))
   }
 
