@@ -21,3 +21,4 @@ opencode.local.json
 opencode.local.jsonc
 *.pem
 *.key
+.pr-review-context-*/

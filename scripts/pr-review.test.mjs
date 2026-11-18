@@ -179,6 +179,147 @@ test('review includes artifact metadata for this head SHA and prior human decisi
   assert.match(result.input.comments[0].body, /Отклонено/)
 })
 
+test('large REST metadata cannot crowd out complete review evidence', async () => {
+  const noise = { url: 'unused'.repeat(16000), owner: { avatar_url: 'unused'.repeat(16000) } }
+  const user = { id: 1, login: 'owner', type: 'User' }
+  const comment = {
+    id: 2,
+    body: 'Согласовано без сокращений.\nУсловие: сохранить соседний сценарий.',
+    user,
+    author_association: 'OWNER',
+    html_url: 'https://github.com/owner/calendar/issues/10#issuecomment-2',
+    created_at: '2026-11-18T10:00:00Z',
+    updated_at: '2026-11-18T10:01:00Z'
+  }
+  const inline = {
+    ...comment,
+    path: files[0].filename,
+    line: 2,
+    original_line: 1,
+    start_line: 1,
+    original_start_line: 1,
+    side: 'RIGHT',
+    start_side: 'RIGHT',
+    diff_hunk: files[0].patch,
+    commit_id: pr.head.sha,
+    original_commit_id: pr.base.sha,
+    in_reply_to_id: 1,
+    pull_request_review_id: 3
+  }
+  const reviewEntry = { ...comment, state: 'CHANGES_REQUESTED', commit_id: pr.head.sha }
+  const commit = {
+    sha: pr.head.sha,
+    commit: { message: 'fix: preserve evidence (#10)', author: { name: 'Owner', date: 'today' } },
+    author: user
+  }
+  const check = {
+    id: 4,
+    name: 'CI',
+    head_sha: pr.head.sha,
+    status: 'completed',
+    conclusion: 'failure',
+    details_url: 'https://example.com/check',
+    output: { title: 'Failure', summary: 'Full summary\nSecond line', text: 'Full log excerpt' },
+    app: { id: 5, slug: 'github-actions', name: 'GitHub Actions' }
+  }
+  const status = {
+    id: 6,
+    context: 'external check',
+    state: 'pending',
+    description: 'Waiting for evidence',
+    target_url: 'https://example.com/status',
+    creator: user
+  }
+  const run = {
+    id: 7,
+    name: 'PR head verification',
+    display_title: 'Full run title',
+    head_sha: pr.head.sha,
+    run_attempt: 2,
+    status: 'completed',
+    conclusion: 'success',
+    html_url: 'https://example.com/run',
+    actor: user
+  }
+  const artifact = {
+    id: 8,
+    name: `pr-20-head-${pr.head.sha}`,
+    expired: false,
+    size_in_bytes: 123,
+    archive_download_url: 'https://example.com/artifact',
+    expires_at: '2026-12-02T10:00:00Z',
+    workflow_run: { id: run.id, head_sha: pr.head.sha }
+  }
+  const issue = {
+    number: 10,
+    title: 'Full specification',
+    body: 'Full specification\nEvery condition is retained.',
+    state: 'open',
+    user,
+    author_association: 'OWNER',
+    labels: [{ name: 'ready-for-agent' }]
+  }
+  const noisy = (entry) => ({
+    ...entry,
+    repository: noise,
+    node_id: noise.url,
+    ...(entry.user && { user: { ...entry.user, ...noise } })
+  })
+  const base = fakeApi()
+  const api = (method, route) => {
+    if (route === `repos/${repository}/issues/10`)
+      return { ...noisy(issue), labels: issue.labels.map(noisy) }
+    if (route.includes('/files?')) return files.map(noisy)
+    if (/\/issues\/(10|20)\/comments\?/u.test(route)) return [noisy(comment)]
+    if (route.includes('/pulls/20/comments?')) return [noisy(inline)]
+    if (route.includes('/reviews?')) return [noisy(reviewEntry)]
+    if (route.includes('/commits?'))
+      return [{ ...noisy(commit), commit: { ...commit.commit, tree: noise } }]
+    if (route.includes('/check-runs?')) return { check_runs: [noisy(check)] }
+    if (route.includes('/statuses?')) return [noisy(status)]
+    if (route.includes('/actions/runs?')) return { workflow_runs: [noisy(run)] }
+    if (route.includes('/actions/runs/7/artifacts?'))
+      return { artifacts: [{ ...noisy(artifact), workflow_run: noisy(artifact.workflow_run) }] }
+    return base.api(method, route)
+  }
+  const { input } = await prepareReview(api, repository, event)
+  assert.deepEqual(input.files, files)
+  assert.deepEqual(input.issues, [{ issue, comments: [comment] }])
+  assert.deepEqual(input.comments, [comment])
+  assert.deepEqual(input.inlineComments, [inline])
+  assert.deepEqual(input.reviews, [reviewEntry])
+  assert.deepEqual(input.commits, [commit])
+  assert.deepEqual(input.checks, [check])
+  assert.deepEqual(input.statuses, [status])
+  assert.deepEqual(input.runs, [run])
+  assert.deepEqual(input.artifacts, [artifact])
+  assert.ok(Buffer.byteLength(JSON.stringify(input)) < 10000)
+})
+
+test('full evidence above the former inline limit is retained for file attachments', async () => {
+  const body = 'Полное обсуждение.\n'.repeat(4000)
+  const { input } = await prepareReview(
+    fakeApi(pr, [{ body, author_association: 'OWNER' }]).api,
+    repository,
+    event
+  )
+  assert.equal(input.comments[0].body, body)
+  assert.ok(Buffer.byteLength(JSON.stringify(input)) > 90000)
+  assert.ok(Buffer.byteLength(JSON.stringify(input)) <= 256000)
+})
+
+test('oversized evidence still fails closed with its measured UTF-8 size and limit', async () => {
+  const base = fakeApi()
+  const api = (method, route) =>
+    route.includes('/issues/10/comments?')
+      ? [{ body: 'я'.repeat(128001), user: { login: 'owner', type: 'User' } }]
+      : base.api(method, route)
+  await assert.rejects(
+    prepareReview(api, repository, event),
+    /review context too large \(\d+ > 256000 bytes\); manual review required/u
+  )
+})
+
 test('incomplete or oversized diffs stop analysis instead of silently reviewing part of a PR', async () => {
   await assert.rejects(
     prepareReview(fakeApi({ ...pr, changed_files: 2 }).api, repository, event),
@@ -191,7 +332,7 @@ test('incomplete or oversized diffs stop analysis instead of silently reviewing 
   const truncated = (method, route) =>
     route.includes('/files?') ? [{ ...files[0], additions: 500 }] : base.api(method, route)
   await assert.rejects(prepareReview(truncated, repository, event), /missing or truncated/)
-  const large = fakeApi({ ...pr, body: 'x'.repeat(90001) })
+  const large = fakeApi({ ...pr, body: 'x'.repeat(256001) })
   await assert.rejects(prepareReview(large.api, repository, event), /context too large/)
 })
 
