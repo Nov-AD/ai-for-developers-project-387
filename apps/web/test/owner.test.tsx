@@ -36,6 +36,34 @@ function fillForm(name = ' Introduction ', description = 'First conversation', d
 }
 
 describe('Owner', () => {
+  it('keeps the essential warning visible and full limitations collapsed by default', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) =>
+        new URL(request.url).pathname === '/bookings'
+          ? upcomingResponse('empty')
+          : meetingTypesResponse('empty')
+      )
+    )
+    renderApp()
+
+    const warning = screen.getByRole('complementary', { name: 'Ограничения учебного приложения' })
+    expect(
+      within(warning).getByText(
+        'Данные публичны и сбрасываются при перезапуске. Не вводите реальные персональные данные.'
+      )
+    ).toBeVisible()
+    const summary = within(warning).getByText('Подробнее об ограничениях')
+    expect(summary).toBeVisible()
+    expect(summary.closest('details')).not.toHaveAttribute('open')
+    expect(within(warning).getByText(/раздел не защищён авторизацией/i)).not.toBeVisible()
+    expect(
+      within(warning).getByText(/работа в нескольких процессах не поддерживается/i)
+    ).not.toBeVisible()
+    expect(screen.getByRole('form', { name: 'Создание типа встречи' })).toBeInTheDocument()
+    await screen.findByText('Типов встреч пока нет. Загляните позже.')
+  })
+
   it('navigates from home, creates a type, refreshes the owner list and shows it to the guest', async () => {
     const type: MeetingType = {
       id: '11111111-1111-4111-8111-111111111111',

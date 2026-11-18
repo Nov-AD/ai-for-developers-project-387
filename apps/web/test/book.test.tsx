@@ -226,6 +226,37 @@ describe('Book availability', () => {
     expect(calls).toEqual([intro.id, review.id])
   })
 
+  it('keeps all 14 dates accessible across months and clears the slot when changing days', async () => {
+    mockApi(() =>
+      availabilityResponse('available', {
+        ...window,
+        windowStartDate: '2026-11-25',
+        windowEndDate: '2026-12-09',
+        slots: [
+          { start: '2026-11-25T06:00:00Z', end: '2026-11-25T06:45:00Z' },
+          { start: '2026-12-08T07:00:00Z', end: '2026-12-08T07:45:00Z' }
+        ]
+      })
+    )
+    renderBook()
+    fireEvent.click(await screen.findByRole('radio', { name: 'Introduction' }))
+
+    const dates = await screen.findByRole('list', { name: 'Даты встречи' })
+    expect(within(dates).getAllByRole('button')).toHaveLength(14)
+    expect(within(dates).getByRole('button', { name: /26 ноября, нет слотов/ })).toBeDisabled()
+    const first = within(dates).getByRole('button', { name: /25 ноября, 1 слотов/ })
+    fireEvent.click(first)
+    fireEvent.click(screen.getByRole('radio', { name: /09:00/ }))
+    expect(first).toHaveAttribute('aria-pressed', 'true')
+
+    const last = within(dates).getByRole('button', { name: /8 декабря, 1 слотов/ })
+    fireEvent.click(last)
+    expect(last).toHaveAttribute('aria-pressed', 'true')
+    expect(first).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByRole('radio', { name: /09:00/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /10:00/ })).not.toBeChecked()
+  })
+
   it('shows a clear no-slots state instead of day buttons when nothing is available', async () => {
     mockApi(() => availabilityResponse('empty'))
     renderBook()

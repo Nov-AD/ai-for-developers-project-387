@@ -59,14 +59,25 @@ export function Owner() {
       <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Управление календарём</h1>
       <aside
         aria-label="Ограничения учебного приложения"
-        className="space-y-2 rounded-xl border bg-secondary p-6"
+        className="rounded-xl border bg-secondary p-4 text-sm"
       >
-        <p>Раздел не защищён авторизацией. Данные доступны каждому, кто обращается к приложению.</p>
         <p>
-          Данные хранятся в памяти: типы встреч и записи исчезают после перезапуска. Работа в
-          нескольких процессах не поддерживается.
+          Данные публичны и сбрасываются при перезапуске. Не вводите реальные персональные данные.
         </p>
-        <p>Не используйте реальные персональные данные в этом учебном приложении.</p>
+        <details className="mt-2">
+          <summary className="w-fit cursor-pointer rounded-sm py-2 font-medium focus-visible:outline-2 focus-visible:outline-ring">
+            Подробнее об ограничениях
+          </summary>
+          <div className="mt-2 space-y-2">
+            <p>
+              Раздел не защищён авторизацией. Данные доступны каждому, кто обращается к приложению.
+            </p>
+            <p>
+              Данные хранятся в памяти: типы встреч и записи исчезают после перезапуска. Работа в
+              нескольких процессах не поддерживается.
+            </p>
+          </div>
+        </details>
       </aside>
       <Card>
         <CardHeader>

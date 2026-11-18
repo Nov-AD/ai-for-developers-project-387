@@ -81,8 +81,12 @@ description = "Type-check every package"
 run = "pnpm typecheck"
 
 [tasks.test]
-description = "Run every test suite"
+description = "Run API and React component test suites"
 run = "pnpm test"
+
+[tasks."test:e2e"]
+description = "Install Chromium, build and run the browser scenario against the real app"
+run = "pnpm test:e2e"
 
 [tasks.smoke]
 description = "Run the API smoke test"

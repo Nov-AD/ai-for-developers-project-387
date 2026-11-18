@@ -198,18 +198,32 @@ export function Book() {
             <div className="space-y-4">
               <div>
                 <h3 className="text-base font-semibold">Выберите день</h3>
-                <ul className="mt-2 flex flex-wrap gap-2">
+                <p className="mt-1 text-sm text-muted-foreground sm:hidden">
+                  {formatDateKey(days[0]!.key)} — {formatDateKey(days[days.length - 1]!.key)}
+                </p>
+                <ul
+                  aria-label="Даты встречи"
+                  className="mt-2 grid grid-cols-7 gap-1 sm:flex sm:flex-wrap sm:gap-2"
+                >
                   {days.map((day) => (
                     <li key={day.key}>
                       <Button
                         type="button"
+                        className="h-14 w-full flex-col gap-0 px-0 sm:h-9 sm:w-auto sm:flex-row sm:gap-2 sm:px-4"
                         variant={selectedDay === day.key ? 'default' : 'outline'}
                         disabled={day.slots.length === 0}
+                        aria-label={`${formatDateKey(day.key)}, ${day.slots.length === 0 ? 'нет слотов' : `${day.slots.length} слотов`}`}
                         aria-pressed={selectedDay === day.key}
                         onClick={() => chooseDay(day.key)}
                       >
-                        {formatDateKey(day.key)}
-                        <span className="ml-2 text-xs">
+                        <span className="text-base sm:hidden" aria-hidden="true">
+                          {Number(day.key.slice(8))}
+                        </span>
+                        <span className="text-[10px] sm:hidden" aria-hidden="true">
+                          {day.slots.length === 0 ? '—' : `${day.slots.length} сл.`}
+                        </span>
+                        <span className="hidden sm:inline">{formatDateKey(day.key)}</span>
+                        <span className="hidden text-xs sm:inline">
                           {day.slots.length === 0 ? 'нет слотов' : `${day.slots.length} слотов`}
                         </span>
                       </Button>
@@ -221,6 +235,9 @@ export function Book() {
               {activeDay && activeDay.slots.length > 0 && (
                 <fieldset>
                   <legend className="text-base font-semibold">Выберите время</legend>
+                  <p className="mt-1 text-sm text-muted-foreground sm:hidden">
+                    {formatDateKey(activeDay.key)}
+                  </p>
                   <ul className="mt-2 grid gap-2 sm:grid-cols-2">
                     {activeDay.slots.map((slot) => (
                       <li key={slot.start}>

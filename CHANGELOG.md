@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/Nov-AD/ai-for-developers-project-386/compare/v0.2.0...v0.2.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* compact mobile calendar and owner notice ([#22](https://github.com/Nov-AD/ai-for-developers-project-386/issues/22)) ([08ae10d](https://github.com/Nov-AD/ai-for-developers-project-386/commit/08ae10d06d7f2c7abbcad5a5eaa7de46a3f3b22d))
+* компактные мобильные экраны календаря ([#22](https://github.com/Nov-AD/ai-for-developers-project-386/issues/22)) ([3648038](https://github.com/Nov-AD/ai-for-developers-project-386/commit/3648038c67b8b70158e5310cd98dff406b8cb5d4))
+
 ## [0.2.0](https://github.com/Nov-AD/ai-for-developers-project-386/compare/v0.1.0...v0.2.0) (2026-11-17)
 
 
