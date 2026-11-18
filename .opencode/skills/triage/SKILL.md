@@ -5,6 +5,8 @@ description: Move issues and external PRs through a state machine of triage role
 
 # Triage
 
+Before starting, read `docs/agents/delivery.md` and apply its stage gates. They take precedence over automatic next steps in this skill.
+
 Move issues on the project issue tracker through a small state machine of triage roles.
 
 Read `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, and `docs/agents/domain.md` before starting. They define this repository's tracker, label mapping, PR scope, and domain documentation.
