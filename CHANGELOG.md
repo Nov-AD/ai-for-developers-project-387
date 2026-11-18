@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/Nov-AD/ai-for-developers-project-387/compare/v0.5.0...v0.6.0) (2026-11-18)
+
+
+### Features
+
+* filter upcoming bookings by date range ([#21](https://github.com/Nov-AD/ai-for-developers-project-387/issues/21)) ([2f1e81d](https://github.com/Nov-AD/ai-for-developers-project-387/commit/2f1e81dcba3018f17b4dccbf617f52bb464e99b9))
+
+
+### Bug Fixes
+
+* record review steps and bound JSON finalization ([c520227](https://github.com/Nov-AD/ai-for-developers-project-387/commit/c520227a5f3fcd0fc80c6dd01285b8fc312d7ff7))
+* record review steps and bound JSON finalization ([40a678d](https://github.com/Nov-AD/ai-for-developers-project-387/commit/40a678d1fc14247aea770c39db76f77e562aeabd))
+
 ## [0.5.0](https://github.com/Nov-AD/ai-for-developers-project-387/compare/v0.4.0...v0.5.0) (2026-11-18)
 
 
