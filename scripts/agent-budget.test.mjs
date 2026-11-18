@@ -58,7 +58,9 @@ test('both human PR comment channels qualify, bots and unauthorized or unrelated
 test('shared budget counts general comments, inline comments, review, cancellation and timeout', async () => {
   const manual = [
     { ...run(1), conclusion: 'cancelled' },
-    { ...run(2, 1, 'pull_request_review_comment'), conclusion: 'timed_out' }
+    { ...run(2, 1, 'pull_request_review_comment'), conclusion: 'timed_out' },
+    run(4),
+    run(5, 1, 'pull_request_review_comment')
   ]
   const first = await inspectBudget(
     fakeApi(manual, [run(3, 1, 'pull_request')]).api,
@@ -67,22 +69,26 @@ test('shared budget counts general comments, inline comments, review, cancellati
     3,
     1
   )
-  assert.deepEqual(first, { allowed: true, reason: '', requests: 3, spent: 3 })
+  assert.deepEqual(first, { allowed: true, reason: '', requests: 5, spent: 5 })
   const exhausted = await inspectBudget(
-    fakeApi([...manual, run(4)], [run(3, 1, 'pull_request')]).api,
+    fakeApi([...manual, run(6)], [run(3, 1, 'pull_request')]).api,
     repository,
     20,
-    4,
+    6,
     1
   )
-  assert.equal(exhausted.allowed, false)
-  assert.equal(exhausted.reason, 'limit_exhausted')
-  assert.equal(attemptLimit, 3)
+  assert.deepEqual(exhausted, {
+    allowed: false,
+    reason: 'limit_exhausted',
+    requests: 6,
+    spent: 5
+  })
+  assert.equal(attemptLimit, 5)
 })
 
 test('rerunning the same run spends another attempt, including rerunning only failed jobs', async () => {
-  const result = await inspectBudget(fakeApi([run(1, 3), run(2)]).api, repository, 20, 1, 3)
-  assert.equal(result.requests, 4)
+  const result = await inspectBudget(fakeApi([run(1, 5), run(2)]).api, repository, 20, 1, 5)
+  assert.equal(result.requests, 6)
   assert.equal(result.allowed, false)
 })
 
@@ -173,12 +179,14 @@ test('model-free limit report carries latest SHA, log link and human handoff', (
   const body = renderAgentResult({
     reason: 'limit_exhausted',
     sha: 'a'.repeat(40),
-    requests: 4,
+    requests: 6,
     url: 'https://github.com/owner/calendar/actions/runs/1/attempts/2'
   })
   assert.match(body, /Нужен человек/)
   assert.match(body, /limit_exhausted/)
   assert.match(body, /Модель не вызывалась/)
+  assert.match(body, /Общий бюджет PR: 5 попыток/)
+  assert.match(body, /записей попыток в истории: 6/)
   assert.match(body, /aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/)
   assert.match(body, /attempts\/2/)
   const infra = renderAgentResult({
