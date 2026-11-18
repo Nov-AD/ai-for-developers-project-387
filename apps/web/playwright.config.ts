@@ -16,7 +16,7 @@ export default defineConfig({
     baseURL,
     locale: 'ru-RU',
     timezoneId: 'Europe/Moscow',
-    trace: 'retain-on-failure',
+    trace: process.env.PLAYWRIGHT_TRACE === 'on' ? 'on' : 'retain-on-failure',
     screenshot: 'only-on-failure'
   },
   webServer: {

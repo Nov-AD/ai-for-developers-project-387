@@ -1,5 +1,15 @@
 name: opencode
 
+# Only eligible human PR requests receive the immutable budget marker.
+run-name: >-
+  ${{ (contains(github.event.comment.body, '/oc') || contains(github.event.comment.body, '/opencode')) &&
+      github.event.comment.user.type == 'User' &&
+      !endsWith(github.event.comment.user.login, '[bot]') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+      (github.event.pull_request || github.event.issue.pull_request) &&
+      format('oc-budget-v1:pr:{0}:comment:{1}', github.event.issue.number || github.event.pull_request.number, github.event.comment.id) ||
+      'opencode (outside PR budget)' }}
+
 on:
   issue_comment:
     types: [created]
@@ -9,87 +19,139 @@ on:
 permissions: {}
 
 concurrency:
-  # Serialize requests for the same issue or PR, including diff comments.
   group: opencode-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
-  opencode:
+  admit:
     if: |
       (contains(github.event.comment.body, '/oc') || contains(github.event.comment.body, '/opencode')) &&
-      github.event.comment.user.type != 'Bot' &&
+      github.event.comment.user.type == 'User' &&
       !endsWith(github.event.comment.user.login, '[bot]') &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: opencode-budget-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    outputs:
+      allowed: ${{ steps.budget.outputs.allowed }}
+      reason: ${{ steps.budget.outputs.reason }}
+      requests: ${{ steps.budget.outputs.requests }}
+    steps:
+      - name: Checkout trusted admission policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Check discussion access, trust and persistent PR budget
+        id: budget
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/agent-budget.mjs admit
+
+  opencode:
+    needs: admit
+    if: needs.admit.outputs.allowed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
       issues: write
       pull-requests: read
+      actions: read
       id-token: write
+    outputs:
+      reason: ${{ steps.budget.outputs.reason || steps.agent.outputs.reason }}
+      agent_outcome: ${{ steps.agent.outcome }}
+      requests: ${{ steps.budget.outputs.requests }}
     steps:
-      - name: Verify discussion access and PR trust
-        id: discussion
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          DISCUSSION_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
-          IS_PULL_REQUEST: ${{ github.event_name == 'pull_request_review_comment' || github.event.issue.pull_request != null }}
-        run: |
-          if [[ "$IS_PULL_REQUEST" == "true" ]]; then
-            is_fork="$(gh pr view "$DISCUSSION_NUMBER" --repo "$GH_REPO" --json isCrossRepository --jq .isCrossRepository)"
-            if [[ "$is_fork" != "false" ]]; then
-              echo "::notice::OpenCode does not run on fork PRs."
-              exit 0
-            fi
-            gh pr view "$DISCUSSION_NUMBER" --repo "$GH_REPO" --json number,title,body,labels,comments,reviews > /dev/null
-            gh api --paginate "repos/$GH_REPO/pulls/$DISCUSSION_NUMBER/comments" > /dev/null
-          else
-            gh issue view "$DISCUSSION_NUMBER" --repo "$GH_REPO" --json number,title,body,labels,comments > /dev/null
-          fi
-          echo "allowed=true" >> "$GITHUB_OUTPUT"
-
       - name: Checkout repository
-        if: steps.discussion.outputs.allowed == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Never execute a PR's code before the agent has reviewed the request.
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
           persist-credentials: false
 
+      # Re-run failed jobs can skip a previously successful "admit" job.
+      - name: Recheck budget for this exact run attempt
+        id: budget
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/agent-budget.mjs admit
+
       - name: Set up project tools
-        if: steps.discussion.outputs.allowed == 'true'
+        if: steps.budget.outputs.allowed == 'true'
         uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        timeout-minutes: 5
         with:
           version: 2026.11.9
 
-      - name: Prepare project skills
-        if: steps.discussion.outputs.allowed == 'true'
-        shell: bash
+      - name: Install locked V1 GitHub integration
+        if: steps.budget.outputs.allowed == 'true'
+        timeout-minutes: 3
+        run: npm ci --prefix .github/manual-agent
+
+      - name: Prepare project skills and supervisor
+        if: steps.budget.outputs.allowed == 'true'
         run: |
           pnpm skills:check
-          # Keep skills available when OpenCode switches to an older PR branch.
           mkdir -p "$HOME/.config/opencode/skills"
           cp -R .opencode/skills/. "$HOME/.config/opencode/skills/"
+          cp scripts/run-manual-agent.mjs "$RUNNER_TEMP/run-manual-agent.mjs"
 
       - name: Run OpenCode
-        if: steps.discussion.outputs.allowed == 'true'
-        # github-v1.2.25; @latest is stale, see anomalyco/opencode#19865.
-        uses: anomalyco/opencode/github@a3b97d9090ccf4aa9ac32268486283e3131e36b4
+        id: agent
+        if: steps.budget.outputs.allowed == 'true'
+        timeout-minutes: 20
         env:
-          # App authentication stays in the Action; shell gh needs its own token.
+          MANUAL_AGENT_CLI: ${{ github.workspace }}/.github/manual-agent/node_modules/.bin/opencode
+          MODEL: opencode/deepseek-v4.1-flash-free
+          MENTIONS: /opencode,/oc
+          SHARE: "true"
+          USE_GITHUB_TOKEN: "false"
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           GH_PROMPT_DISABLED: "1"
-          # There is no interactive client to answer filesystem approval requests.
-          # This GitHub Action installs V1: its policy must use singular "permission".
+          # Locked CLI 1.19.6 keeps the existing App/OIDC integration and V1 policy.
           OPENCODE_CONFIG_CONTENT: >-
             {"$schema":"https://opencode.ai/config.json","permission":{
             "external_directory":"deny",
             "read":{"*.env":"deny","*.env.*":"deny"}}}
+        run: node "$RUNNER_TEMP/run-manual-agent.mjs"
+
+  report:
+    needs: [admit, opencode]
+    if: |
+      always() &&
+      (github.event.pull_request || github.event.issue.pull_request) &&
+      (contains(github.event.comment.body, '/oc') || contains(github.event.comment.body, '/opencode')) &&
+      github.event.comment.user.type == 'User' &&
+      !endsWith(github.event.comment.user.login, '[bot]') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout trusted reporter on a fresh runner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          model: opencode/deepseek-v4.1-flash-free
-          mentions: /opencode,/oc
-          share: true
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Report without a model, including exhaustion and failures
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUDGET_REASON: ${{ needs.opencode.outputs.reason || needs.admit.outputs.reason }}
+          BUDGET_REQUESTS: ${{ needs.opencode.outputs.requests || needs.admit.outputs.requests }}
+          ADMISSION_RESULT: ${{ needs.admit.result }}
+          WORKER_RESULT: ${{ needs.opencode.result }}
+          AGENT_OUTCOME: ${{ needs.opencode.outputs.agent_outcome }}
+          AGENT_REASON: ${{ needs.opencode.outputs.reason }}
+        run: node scripts/agent-budget.mjs report

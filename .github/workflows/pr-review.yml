@@ -1,0 +1,119 @@
+name: PR auto review
+
+run-name: >-
+  ${{ vars.OPENCODE_AUTO_REVIEW != 'off' &&
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch &&
+      (contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) ||
+       (github.event.pull_request.user.type == 'Bot' &&
+        github.event.pull_request.user.login == 'opencode-agent[bot]' &&
+        startsWith(github.event.pull_request.head.ref, 'opencode/'))) &&
+      format('oc-budget-v1:pr:{0}:review', github.event.pull_request.number) ||
+      'PR review (outside budget)' }}
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: opencode-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    if: |
+      vars.OPENCODE_AUTO_REVIEW != 'off' &&
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch &&
+      (contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) ||
+       (github.event.pull_request.user.type == 'Bot' &&
+        github.event.pull_request.user.login == 'opencode-agent[bot]' &&
+        startsWith(github.event.pull_request.head.ref, 'opencode/')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    concurrency:
+      group: opencode-budget-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+      checks: read
+      statuses: read
+    outputs:
+      proposal: ${{ steps.analysis.outputs.proposal }}
+      fingerprint: ${{ steps.prepare.outputs.fingerprint }}
+      reason: ${{ steps.analysis.outputs.reason || steps.prepare.outputs.reason }}
+      requests: ${{ steps.prepare.outputs.requests }}
+    steps:
+      - name: Checkout trusted reviewer, never PR code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Verify trust and collect diff, discussion, issues and CI
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! -f scripts/pr-review.mjs || ! -f .opencode/agents/pr-review.md ]]; then
+            echo "::notice::Reviewer is not installed on the default branch yet; bootstrap PR needs human review."
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node scripts/pr-review.mjs prepare
+
+      - name: Set up Node
+        if: steps.prepare.outputs.allowed == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.11.1'
+
+      - name: Install locked OpenCode V2 CLI
+        if: steps.prepare.outputs.allowed == 'true'
+        run: npm ci --prefix .github/auto-triage
+
+      - name: Review without GitHub credentials or mutation tools
+        id: analysis
+        if: steps.prepare.outputs.allowed == 'true'
+        env:
+          REVIEW_CLI: ${{ github.workspace }}/.github/auto-triage/node_modules/.bin/opencode
+          REVIEW_CRITERIA: REVIEW.md
+        run: node scripts/pr-review.mjs analyze
+
+  publish:
+    needs: analyze
+    if: always() && needs.analyze.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout trusted publisher
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Recheck PR and publish only a comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_PROPOSAL: ${{ needs.analyze.outputs.proposal }}
+          REVIEW_FINGERPRINT: ${{ needs.analyze.outputs.fingerprint }}
+          REVIEW_REASON: ${{ needs.analyze.outputs.reason }}
+          REVIEW_REQUESTS: ${{ needs.analyze.outputs.requests }}
+        run: |
+          if [[ -n "$REVIEW_PROPOSAL" ]]; then
+            node scripts/pr-review.mjs publish
+          elif [[ -f scripts/pr-review.mjs ]]; then
+            node scripts/pr-review.mjs report
+          else
+            echo "::notice::Bootstrap PR requires human review; reviewer not installed on default branch."
+          fi

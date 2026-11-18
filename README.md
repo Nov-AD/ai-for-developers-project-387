@@ -214,6 +214,36 @@ Issue прочитан через публичный GitHub REST API. Предв
 запуска описаны в [docs/agents/opencode.md](docs/agents/opencode.md).
 Наличие workflow само по себе не подтверждает работающую интеграцию.
 
+### Авторевью pull requests
+
+[`.github/workflows/pr-review.yml`](.github/workflows/pr-review.yml) отдельно
+обрабатывает изменения PR. Обычный CLI OpenCode V2 читает diff, обсуждение,
+связанные Issues и снимок CI; отдельное задание публикует замечания через
+`gh pr comment`. Авторевью не меняет код и не принимает решение о мерже.
+
+Допускаются доверенные люди и `opencode-agent[bot]` с ветками `opencode/*`
+только внутри этого репозитория, с целью в default branch. Fork PR пропускаются.
+Код PR не исполняется, GitHub App и OIDC этому workflow не нужны. Сохраняется
+согласованная бесплатная модель без нового Secret; сессия не публикуется через Share.
+Новый запуск отменяет устаревшее ревью того же PR. Для отключения —
+`OPENCODE_AUTO_REVIEW=off` или **Actions → PR auto review → Disable workflow**.
+
+Границы доверия, лимиты и обязательная живая проверка обоих каналов обратной связи —
+в [docs/agents/opencode.md](docs/agents/opencode.md#авторевью-pr).
+Правила релиза и выбранная авторизация release-please —
+в [docs/releases.md](docs/releases.md).
+
+Общий бюджет — **3 попытки на PR**, включая ручные команды, авторевью,
+отмены и Re-run; история Actions, а не текст комментария, служит счётчиком.
+При исчерпании модели нет, отдельный reporter пишет `limit_exhausted`
+и «Нужен человек». Условия сохранности истории и другие причины остановки —
+в [описании бюджета](docs/agents/opencode.md#общий-бюджет-pr-и-результаты-без-модели).
+Критерии независимого ревью — в [`REVIEW.md`](REVIEW.md), шаблон описания —
+в [`.github/pull_request_template.md`](.github/pull_request_template.md).
+Отдельный [`PR head E2E`](.github/workflows/pr-head-e2e.yml) сохраняет точный
+SHA, результат и trace успешного браузерного прогона; перед мержем человек
+открывает артефакт и сверяет его с текущим head PR.
+
 ### Автотриаж новых Issues
 
 Workflow [`.github/workflows/auto-triage.yml`](.github/workflows/auto-triage.yml)
