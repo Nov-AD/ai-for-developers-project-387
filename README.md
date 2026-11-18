@@ -161,8 +161,8 @@ Workflow `.github/workflows/ci.yml` вызывает ту же `mise run check` 
 1. `mise run audit` запускает OSV-Scanner по трём lockfiles. Важно:
    используется `pnpm run audit`, а не встроенная команда `pnpm audit`.
    Находки — входные данные агента, а ошибка сканера останавливает процесс.
-2. Закреплённый CLI OpenCode V2 использует существующую бесплатную модель
-   `opencode/deepseek-v4.1-flash-free` без нового Secret и без платного fallback.
+2. Закреплённый CLI OpenCode V2 использует бесплатную модель
+   `opencode/mimo-v2.6-flash-free` без нового Secret и без платного fallback.
    Prompt и политика — [агент dependency-audit](.opencode/agents/dependency-audit.md).
    Он объясняет риски и предлагает следующий шаг; у него нет инструментов,
    GitHub-токена или разрешения менять зависимости. Эффективную политику

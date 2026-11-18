@@ -315,6 +315,8 @@ function pipelineFixture(t, scannerReport = { results: [] }, scannerStatus = 0) 
       console.log(JSON.stringify([{id: 'dependency-audit', mode: 'primary', steps: 4,
         permissions: [{action: '*', resource: '*', effect: 'deny'}]}]));
     } else {
+      const modelIndex = process.argv.indexOf('--model');
+      if (modelIndex === -1 || process.argv[modelIndex + 1] !== 'opencode/mimo-v2.6-flash-free') process.exit(99);
       const prompt = process.argv.at(-1);
       const input = JSON.parse(prompt.slice(prompt.indexOf('\\n') + 1));
       console.log(JSON.stringify({type: 'text', part: {text: JSON.stringify({
