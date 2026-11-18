@@ -78,8 +78,6 @@ jobs:
         if: steps.discussion.outputs.allowed == 'true'
         # github-v1.2.25; @latest is stale, see anomalyco/opencode#19865.
         uses: anomalyco/opencode/github@a3b97d9090ccf4aa9ac32268486283e3131e36b4
-        env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:
           model: opencode/deepseek-v4.1-flash-free
           mentions: /opencode,/oc
