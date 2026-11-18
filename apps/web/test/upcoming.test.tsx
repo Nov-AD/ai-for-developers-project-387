@@ -72,6 +72,39 @@ function bookingCalls(fetch: ReturnType<typeof mockOwner>) {
   return fetch.mock.calls.filter(([request]) => new URL(request.url).pathname === '/bookings')
 }
 
+function hasCombinedFilters(params: URLSearchParams) {
+  return (
+    params.get('guestName') === 'Анна' &&
+    params.get('meetingTypeId') === intro.id &&
+    params.get('fromDate') === '2026-11-18' &&
+    params.get('toDate') === '2026-11-18'
+  )
+}
+
+function expectCombinedFilters(params: URLSearchParams) {
+  expect(Object.fromEntries(params)).toEqual({
+    guestName: 'Анна',
+    meetingTypeId: intro.id,
+    fromDate: '2026-11-18',
+    toDate: '2026-11-18'
+  })
+}
+
+function mockCombinedFiltersOwner() {
+  const fetch = vi.fn(async (request: Request) => {
+    const url = new URL(request.url)
+    if (url.pathname === '/meeting-types') return meetingTypesResponse('populated', [intro, review])
+    if (url.pathname === '/bookings') {
+      return hasCombinedFilters(url.searchParams)
+        ? upcomingResponse('populated', [firstBooking])
+        : upcomingResponse('populated', [firstBooking, secondBooking])
+    }
+    throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+  })
+  vi.stubGlobal('fetch', fetch)
+  return fetch
+}
+
 describe('Owner upcoming bookings', () => {
   it('shows every type booking in Europe/Moscow with guest, type, duration and explicit zone', async () => {
     mockOwner(() => upcomingResponse('populated', [firstBooking, secondBooking]))
@@ -532,6 +565,119 @@ describe('Owner upcoming bookings', () => {
     const request = new URL((bookingCalls(fetch).at(-1)![0] as Request).url).searchParams
     expect(request.has('fromDate')).toBe(false)
     expect(request.has('toDate')).toBe(false)
+    expect(await screen.findByText('Борис')).toBeInTheDocument()
+  })
+
+  it('sends only active filters and combines them in one request', async () => {
+    const fetch = mockCombinedFiltersOwner()
+    renderOwner()
+
+    await screen.findByText('Борис')
+    expect(new URL((bookingCalls(fetch).at(-1)![0] as Request).url).search).toBe('')
+
+    const name = screen.getByLabelText('Имя гостя')
+    const select = screen.getByLabelText('Тип встречи')
+    fireEvent.change(name, { target: { value: '   ' } })
+    fireEvent.change(select, { target: { value: intro.id } })
+
+    await waitFor(
+      () => {
+        const params = new URL((bookingCalls(fetch).at(-1)![0] as Request).url).searchParams
+        expect(params.get('meetingTypeId')).toBe(intro.id)
+        expect(params.has('guestName')).toBe(false)
+      },
+      { timeout: MEETING_TYPE_FILTER_IMMEDIATE_MS }
+    )
+
+    fireEvent.change(name, { target: { value: '  Анна  ' } })
+    fireEvent.change(screen.getByLabelText('Дата с'), { target: { value: '2026-11-18' } })
+    fireEvent.change(screen.getByLabelText('Дата по'), { target: { value: '2026-11-18' } })
+
+    await waitFor(
+      () => {
+        expectCombinedFilters(new URL((bookingCalls(fetch).at(-1)![0] as Request).url).searchParams)
+      },
+      { timeout: 1500 }
+    )
+    await waitFor(() => expect(screen.queryByText('Борис')).not.toBeInTheDocument())
+    expect(screen.getByText('Анна')).toBeInTheDocument()
+  })
+
+  it('keeps every filter on manual refresh and window focus', async () => {
+    const fetch = mockCombinedFiltersOwner()
+    renderOwner()
+
+    const name = await screen.findByLabelText('Имя гостя')
+    const select = screen.getByLabelText('Тип встречи')
+    const fromDate = screen.getByLabelText('Дата с')
+    const toDate = screen.getByLabelText('Дата по')
+    await waitFor(() =>
+      expect(within(select).getByRole('option', { name: 'Review' })).toBeInTheDocument()
+    )
+    await screen.findByText('Борис')
+    fireEvent.change(name, { target: { value: 'Анна' } })
+    fireEvent.change(select, { target: { value: intro.id } })
+    fireEvent.change(fromDate, { target: { value: '2026-11-18' } })
+    fireEvent.change(toDate, { target: { value: '2026-11-18' } })
+    await waitFor(
+      () => {
+        expectCombinedFilters(new URL((bookingCalls(fetch).at(-1)![0] as Request).url).searchParams)
+      },
+      { timeout: 1500 }
+    )
+    await waitFor(() => expect(screen.queryByText('Борис')).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Обновить список' })).toBeEnabled()
+    )
+
+    const beforeRefresh = bookingCalls(fetch).length
+    fireEvent.click(screen.getByRole('button', { name: 'Обновить список' }))
+
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(beforeRefresh))
+    expectCombinedFilters(new URL((bookingCalls(fetch).at(-1)![0] as Request).url).searchParams)
+
+    // React Query's focus manager listens to visibilitychange; this is the path
+    // the owner page uses when the window regains attention.
+    const beforeFocus = bookingCalls(fetch).length
+    window.dispatchEvent(new Event('visibilitychange'))
+
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(beforeFocus))
+    expectCombinedFilters(new URL((bookingCalls(fetch).at(-1)![0] as Request).url).searchParams)
+    expect(name).toHaveValue('Анна')
+    expect(select).toHaveValue(intro.id)
+    expect(fromDate).toHaveValue('2026-11-18')
+    expect(toDate).toHaveValue('2026-11-18')
+  })
+
+  it('clears every control at once and requests the full list on reset', async () => {
+    const fetch = mockCombinedFiltersOwner()
+    renderOwner()
+
+    const name = await screen.findByLabelText('Имя гостя')
+    const select = screen.getByLabelText('Тип встречи')
+    const fromDate = screen.getByLabelText('Дата с')
+    const toDate = screen.getByLabelText('Дата по')
+    await waitFor(() =>
+      expect(within(select).getByRole('option', { name: 'Review' })).toBeInTheDocument()
+    )
+    await screen.findByText('Борис')
+    fireEvent.change(name, { target: { value: 'Анна' } })
+    fireEvent.change(select, { target: { value: intro.id } })
+    fireEvent.change(fromDate, { target: { value: '2026-11-18' } })
+    fireEvent.change(toDate, { target: { value: '2026-11-18' } })
+    await waitFor(() => expect(screen.queryByText('Борис')).not.toBeInTheDocument(), {
+      timeout: 1500
+    })
+    const before = bookingCalls(fetch).length
+
+    fireEvent.click(screen.getByRole('button', { name: 'Сбросить фильтры' }))
+
+    expect(name).toHaveValue('')
+    expect(select).toHaveValue('')
+    expect(fromDate).toHaveValue('')
+    expect(toDate).toHaveValue('')
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(before))
+    expect(new URL((bookingCalls(fetch).at(-1)![0] as Request).url).search).toBe('')
     expect(await screen.findByText('Борис')).toBeInTheDocument()
   })
 

@@ -450,6 +450,38 @@ describe('GET /bookings', () => {
     assertContractResponse(listOperation, response.statusCode, response.json())
   })
 
+  it('applies every active filter by AND to the end > now set without changing the order', async () => {
+    freeze('2026-11-17T05:00:00Z')
+    const instance = await build()
+    const short = await createType(instance, 'Короткий', 30)
+    const long = await createType(instance, 'Длинный', 45)
+    const tiny = await createType(instance, 'Минута', 1)
+    const ended = await book(instance, tiny, '2026-11-18T06:00:00Z', 'Anna')
+    const ongoing = await book(instance, short, '2026-11-18T07:00:00Z', 'Anna')
+    const later = await book(instance, short, '2026-11-18T08:00:00Z', 'Anna')
+    await book(instance, short, '2026-11-18T09:00:00Z', 'Boris')
+    await book(instance, long, '2026-11-18T10:00:00Z', 'Anna')
+    await book(instance, short, '2026-11-19T06:00:00Z', 'Anna')
+
+    vi.setSystemTime(new Date('2026-11-18T07:15:00Z'))
+    const response = await instance.inject({
+      method: 'GET',
+      url: '/bookings',
+      query: {
+        guestName: '  anna  ',
+        meetingTypeId: short,
+        fromDate: '2026-11-18',
+        toDate: '2026-11-18'
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json<Array<{ id: string }>>()
+    expect(body.map(({ id }) => id)).toEqual([ongoing.id, later.id])
+    expect(body.map(({ id }) => id)).not.toContain(ended.id)
+    assertContractResponse(listOperation, response.statusCode, body)
+  })
+
   it('rejects unknown query parameters with the contract validation error', async () => {
     freeze()
     const instance = await build()
