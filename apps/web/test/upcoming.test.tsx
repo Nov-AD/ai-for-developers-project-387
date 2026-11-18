@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { meetingTypesResponse, upcomingResponse } from './helpers/contract'
 
+const MEETING_TYPE_FILTER_IMMEDIATE_MS = 250
+
 afterEach(() => {
   window.history.pushState({}, '', '/')
   vi.unstubAllGlobals()
@@ -194,6 +196,156 @@ describe('Owner upcoming bookings', () => {
     await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(before))
     const request = bookingCalls(fetch).at(-1)![0] as Request
     expect(new URL(request.url).searchParams.has('guestName')).toBe(false)
+    expect(await screen.findByText('Борис')).toBeInTheDocument()
+  })
+
+  it('labels the meeting type select and takes its options from the shared types query', async () => {
+    const fetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/meeting-types')
+        return meetingTypesResponse('populated', [intro, review])
+      if (url.pathname === '/bookings') {
+        return url.searchParams.has('meetingTypeId')
+          ? upcomingResponse('populated', [firstBooking])
+          : upcomingResponse('populated', [firstBooking, secondBooking])
+      }
+      throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderOwner()
+
+    const select = await screen.findByLabelText('Тип встречи')
+    expect(select).toHaveAccessibleName('Тип встречи')
+    await waitFor(() =>
+      expect(
+        within(select)
+          .getAllByRole('option')
+          .map((option) => option.textContent)
+      ).toEqual(['Все типы', 'Introduction', 'Review'])
+    )
+    await screen.findByText('Борис')
+    const before = bookingCalls(fetch).length
+
+    fireEvent.change(select, { target: { value: intro.id } })
+
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(before), {
+      timeout: MEETING_TYPE_FILTER_IMMEDIATE_MS
+    })
+    const request = bookingCalls(fetch).at(-1)![0] as Request
+    expect(new URL(request.url).searchParams.get('meetingTypeId')).toBe(intro.id)
+    expect(new URL(request.url).searchParams.has('guestName')).toBe(false)
+    await waitFor(() => expect(screen.queryByText('Борис')).not.toBeInTheDocument())
+    expect(screen.getByText('Анна')).toBeInTheDocument()
+
+    // The filtered response no longer contains Review, but the option stays available.
+    expect(within(select).getByRole('option', { name: 'Review' })).toBeInTheDocument()
+    const meetingTypeCalls = fetch.mock.calls.filter(
+      ([request]) => new URL(request.url).pathname === '/meeting-types'
+    )
+    expect(meetingTypeCalls).toHaveLength(1)
+  })
+
+  it('distinguishes an empty filtered result for a selected meeting type', async () => {
+    const fetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/meeting-types')
+        return meetingTypesResponse('populated', [intro, review])
+      if (url.pathname === '/bookings') {
+        return url.searchParams.has('meetingTypeId')
+          ? upcomingResponse('filtered-empty')
+          : upcomingResponse('empty')
+      }
+      throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderOwner()
+
+    expect(await screen.findByText('Предстоящих записей нет.')).toBeInTheDocument()
+    const select = await screen.findByLabelText('Тип встречи')
+    await waitFor(() =>
+      expect(within(select).getByRole('option', { name: 'Review' })).toBeInTheDocument()
+    )
+
+    fireEvent.change(select, { target: { value: intro.id } })
+
+    expect(await screen.findByText('По выбранным фильтрам записей нет.')).toBeInTheDocument()
+    expect(screen.queryByText('Предстоящих записей нет.')).not.toBeInTheDocument()
+  })
+
+  it('sends the meeting type together with the debounced guest name', async () => {
+    const fetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/meeting-types')
+        return meetingTypesResponse('populated', [intro, review])
+      if (url.pathname === '/bookings') {
+        return url.searchParams.has('guestName') && url.searchParams.has('meetingTypeId')
+          ? upcomingResponse('populated', [firstBooking])
+          : upcomingResponse('populated', [firstBooking, secondBooking])
+      }
+      throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderOwner()
+
+    const select = await screen.findByLabelText('Тип встречи')
+    await waitFor(() =>
+      expect(within(select).getByRole('option', { name: 'Review' })).toBeInTheDocument()
+    )
+    await screen.findByText('Борис')
+    fireEvent.change(select, { target: { value: intro.id } })
+    await waitFor(
+      () => {
+        const request = bookingCalls(fetch).at(-1)![0] as Request
+        expect(new URL(request.url).searchParams.get('meetingTypeId')).toBe(intro.id)
+      },
+      { timeout: MEETING_TYPE_FILTER_IMMEDIATE_MS }
+    )
+
+    fireEvent.change(screen.getByLabelText('Имя гостя'), { target: { value: '  Анна  ' } })
+
+    await waitFor(
+      () => {
+        const request = bookingCalls(fetch).at(-1)![0] as Request
+        const params = new URL(request.url).searchParams
+        expect(params.get('meetingTypeId')).toBe(intro.id)
+        expect(params.get('guestName')).toBe('Анна')
+      },
+      { timeout: 1500 }
+    )
+    await waitFor(() => expect(screen.queryByText('Борис')).not.toBeInTheDocument())
+    expect(screen.getByText('Анна')).toBeInTheDocument()
+  })
+
+  it('clears the selected meeting type and immediately requests the full list on reset', async () => {
+    const fetch = vi.fn(async (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname === '/meeting-types')
+        return meetingTypesResponse('populated', [intro, review])
+      if (url.pathname === '/bookings') {
+        return url.searchParams.has('meetingTypeId')
+          ? upcomingResponse('populated', [firstBooking])
+          : upcomingResponse('populated', [firstBooking, secondBooking])
+      }
+      throw new Error(`Unexpected request ${request.method} ${url.pathname}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    renderOwner()
+
+    const select = await screen.findByLabelText('Тип встречи')
+    await waitFor(() =>
+      expect(within(select).getByRole('option', { name: 'Review' })).toBeInTheDocument()
+    )
+    await screen.findByText('Борис')
+    fireEvent.change(select, { target: { value: intro.id } })
+    await waitFor(() => expect(screen.queryByText('Борис')).not.toBeInTheDocument())
+    const before = bookingCalls(fetch).length
+
+    fireEvent.click(screen.getByRole('button', { name: 'Сбросить фильтры' }))
+
+    expect(select).toHaveValue('')
+    await waitFor(() => expect(bookingCalls(fetch).length).toBeGreaterThan(before))
+    const request = bookingCalls(fetch).at(-1)![0] as Request
+    expect(new URL(request.url).searchParams.has('meetingTypeId')).toBe(false)
     expect(await screen.findByText('Борис')).toBeInTheDocument()
   })
 

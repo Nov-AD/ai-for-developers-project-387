@@ -280,7 +280,11 @@ paths:
         time zone. Refresh on owner page entry, focus and manual refresh; no polling required.
         The optional guestName query parameter trims surrounding whitespace, ignores an empty
         value, matches a case-insensitive substring and rejects values longer than 100 characters
-        after trimming with 400 VALIDATION_ERROR. Unknown query parameters are still rejected.
+        after trimming with 400 VALIDATION_ERROR. The optional meetingTypeId query parameter
+        narrows the list to bookings of one type; a malformed UUID is 400 VALIDATION_ERROR,
+        while a well-formed UUID with no matching type is still 200 [] because this is a filter,
+        not a lookup of one type. All active filters combine with AND. Unknown query parameters
+        are still rejected.
       parameters:
         - name: guestName
           in: query
@@ -288,6 +292,13 @@ paths:
           description: Optional guest name filter; case-insensitive substring after trimming. Empty value disables the filter.
           schema:
             $ref: '#/components/schemas/GuestNameFilter'
+          explode: false
+        - name: meetingTypeId
+          in: query
+          required: false
+          description: Optional meeting type filter; malformed UUID is 400, unknown well-formed UUID is 200 [].
+          schema:
+            $ref: '#/components/schemas/Uuid'
           explode: false
       responses:
         '200':
@@ -299,6 +310,30 @@ paths:
                 items:
                   $ref: '#/components/schemas/Booking'
               examples:
+                Filtered by guest name and meeting type:
+                  summary: Filtered by guest name and meeting type
+                  value:
+                    - id: 22222222-2222-4222-8222-222222222222
+                      meetingType:
+                        id: 11111111-1111-4111-8111-111111111111
+                        name: Introduction
+                        description: ''
+                        durationMinutes: 45
+                      guestName: Alex
+                      start: '2026-11-18T06:00:00Z'
+                      end: '2026-11-18T06:45:00Z'
+                Filtered by meeting type:
+                  summary: Filtered by meeting type
+                  value:
+                    - id: 22222222-2222-4222-8222-222222222222
+                      meetingType:
+                        id: 11111111-1111-4111-8111-111111111111
+                        name: Introduction
+                        description: ''
+                        durationMinutes: 45
+                      guestName: Alex
+                      start: '2026-11-18T06:00:00Z'
+                      end: '2026-11-18T06:45:00Z'
                 Filtered by guest name:
                   summary: Filtered by guest name
                   value:
@@ -404,10 +439,56 @@ paths:
               guestName: Alex
               start: '2026-11-18T06:00:00Z'
               end: '2026-11-18T06:45:00Z'
+        - name: filtered-by-type
+          request:
+            query:
+              meetingTypeId: 11111111-1111-4111-8111-111111111111
+          status: 200
+          body:
+            - id: 22222222-2222-4222-8222-222222222222
+              meetingType:
+                id: 11111111-1111-4111-8111-111111111111
+                name: Introduction
+                description: ''
+                durationMinutes: 45
+              guestName: Alex
+              start: '2026-11-18T06:00:00Z'
+              end: '2026-11-18T06:45:00Z'
+        - name: filtered-by-type-and-name
+          request:
+            query:
+              meetingTypeId: 11111111-1111-4111-8111-111111111111
+              guestName: Alex
+          status: 200
+          body:
+            - id: 22222222-2222-4222-8222-222222222222
+              meetingType:
+                id: 11111111-1111-4111-8111-111111111111
+                name: Introduction
+                description: ''
+                durationMinutes: 45
+              guestName: Alex
+              start: '2026-11-18T06:00:00Z'
+              end: '2026-11-18T06:45:00Z'
+        - name: unknown-type-filter
+          request:
+            query:
+              meetingTypeId: 99999999-9999-4999-8999-999999999999
+          status: 200
+          body: []
         - name: too-long-filter
           request:
             query:
               guestName: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          requestValid: false
+          status: 400
+          body:
+            code: VALIDATION_ERROR
+            message: Проверьте параметры запроса.
+        - name: malformed-type-filter
+          request:
+            query:
+              meetingTypeId: not-a-uuid
           requestValid: false
           status: 400
           body:

@@ -296,6 +296,10 @@ export type ListUpcomingBookingsData = {
          * Optional guest name filter; case-insensitive substring after trimming. Empty value disables the filter.
          */
         guestName?: GuestNameFilter;
+        /**
+         * Optional meeting type filter; malformed UUID is 400, unknown well-formed UUID is 200 [].
+         */
+        meetingTypeId?: Uuid;
     };
     url: '/bookings';
 };

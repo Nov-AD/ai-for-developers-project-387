@@ -339,13 +339,19 @@ ascending, then UUID ascending. Empty is 200 []. Display in Europe/Moscow with a
 time zone. Refresh on owner page entry, focus and manual refresh; no polling required.
 The optional guestName query parameter trims surrounding whitespace, ignores an empty
 value, matches a case-insensitive substring and rejects values longer than 100 characters
-after trimming with 400 VALIDATION_ERROR. Unknown query parameters are still rejected.
+after trimming with 400 VALIDATION_ERROR. The optional meetingTypeId query parameter
+narrows the list to bookings of one type; a malformed UUID is 400 VALIDATION_ERROR,
+while a well-formed UUID with no matching type is still 200 [] because this is a filter,
+not a lookup of one type. All active filters combine with AND. Unknown query parameters
+are still rejected.
 """)
 @route("/bookings")
 @get
 @opExample(#{returnType: #[]}, #{title: "Empty list"})
 @opExample(#{returnType: #[exampleBooking]}, #{title: "Upcoming and ongoing calls"})
 @opExample(#{parameters: #{guestName: "Alex"}, returnType: #[exampleBooking]}, #{title: "Filtered by guest name"})
+@opExample(#{parameters: #{meetingTypeId: exampleTypeId}, returnType: #[exampleBooking]}, #{title: "Filtered by meeting type"})
+@opExample(#{parameters: #{guestName: "Alex", meetingTypeId: exampleTypeId}, returnType: #[exampleBooking]}, #{title: "Filtered by guest name and meeting type"})
 @opExample(#{returnType: #{statusCode: 400, body: #{code: "VALIDATION_ERROR", message: "Проверьте параметры запроса."}}})
 @extension("x-contract-scenarios", #[
   #{name: "empty", status: 200, body: #[]},
@@ -354,9 +360,17 @@ after trimming with 400 VALIDATION_ERROR. Unknown query parameters are still rej
   #{name: "filtered-empty", request: #{query: #{guestName: "Nobody"}}, status: 200, body: #[]},
   #{name: "trimmed-filter", request: #{query: #{guestName: "  Alex  "}}, status: 200, body: #[exampleBooking]},
   #{name: "empty-filter", request: #{query: #{guestName: "   "}}, status: 200, body: #[exampleBooking]},
+  #{name: "filtered-by-type", request: #{query: #{meetingTypeId: exampleTypeId}}, status: 200, body: #[exampleBooking]},
+  #{name: "filtered-by-type-and-name", request: #{query: #{meetingTypeId: exampleTypeId, guestName: "Alex"}}, status: 200, body: #[exampleBooking]},
+  #{name: "unknown-type-filter", request: #{query: #{meetingTypeId: "99999999-9999-4999-8999-999999999999"}}, status: 200, body: #[]},
   #{name: "too-long-filter", request: #{query: #{guestName: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, requestValid: false,
+    status: 400, body: #{code: "VALIDATION_ERROR", message: "Проверьте параметры запроса."}},
+  #{name: "malformed-type-filter", request: #{query: #{meetingTypeId: "not-a-uuid"}}, requestValid: false,
     status: 400, body: #{code: "VALIDATION_ERROR", message: "Проверьте параметры запроса."}},
   #{name: "unknown-query", request: #{query: #{extra: "x"}}, requestValid: false,
     status: 400, body: #{code: "VALIDATION_ERROR", message: "Проверьте параметры запроса."}}
 ])
-op listUpcomingBookings(@doc("Optional guest name filter; case-insensitive substring after trimming. Empty value disables the filter.") @query guestName?: GuestNameFilter): Booking[] | BadRequest;
+op listUpcomingBookings(
+  @doc("Optional guest name filter; case-insensitive substring after trimming. Empty value disables the filter.") @query guestName?: GuestNameFilter,
+  @doc("Optional meeting type filter; malformed UUID is 400, unknown well-formed UUID is 200 [].") @query meetingTypeId?: Uuid
+): Booking[] | BadRequest;

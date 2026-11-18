@@ -66,7 +66,11 @@ export const listUpcomingBookingsQueryKey = (options?: Options<ListUpcomingBooki
  * time zone. Refresh on owner page entry, focus and manual refresh; no polling required.
  * The optional guestName query parameter trims surrounding whitespace, ignores an empty
  * value, matches a case-insensitive substring and rejects values longer than 100 characters
- * after trimming with 400 VALIDATION_ERROR. Unknown query parameters are still rejected.
+ * after trimming with 400 VALIDATION_ERROR. The optional meetingTypeId query parameter
+ * narrows the list to bookings of one type; a malformed UUID is 400 VALIDATION_ERROR,
+ * while a well-formed UUID with no matching type is still 200 [] because this is a filter,
+ * not a lookup of one type. All active filters combine with AND. Unknown query parameters
+ * are still rejected.
  */
 export const listUpcomingBookingsOptions = (options?: Options<ListUpcomingBookingsData>) => queryOptions<ListUpcomingBookingsResponse, ListUpcomingBookingsError, ListUpcomingBookingsResponse, ReturnType<typeof listUpcomingBookingsQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {

@@ -58,7 +58,8 @@ const createInput = z.strictObject({
 }) satisfies z.ZodType<components['schemas']['CreateBookingInput']>
 
 const upcomingFilters = z.strictObject({
-  guestName: z.string().trim().max(100).optional()
+  guestName: z.string().trim().max(100).optional(),
+  meetingTypeId: z.uuid().optional()
 }) satisfies z.ZodType<NonNullable<operations['listUpcomingBookings']['parameters']['query']>>
 
 const bookingRoutes: FastifyPluginAsyncZod = async (fastify): Promise<void> => {
@@ -147,7 +148,11 @@ const bookingRoutes: FastifyPluginAsyncZod = async (fastify): Promise<void> => {
     async (request) => {
       // Recomputed per request: the window advances and finished calls disappear.
       const guestName = request.query.guestName
-      return fastify.bookings.upcoming(new Date(), guestName ? { guestName } : {})
+      const meetingTypeId = request.query.meetingTypeId
+      return fastify.bookings.upcoming(new Date(), {
+        ...(guestName ? { guestName } : {}),
+        ...(meetingTypeId ? { meetingTypeId } : {})
+      })
     }
   )
 }

@@ -58,6 +58,10 @@ async function upcomingByGuestName(instance: FastifyInstance, guestName: string)
   return instance.inject({ method: 'GET', url: '/bookings', query: { guestName } })
 }
 
+async function upcomingByMeetingType(instance: FastifyInstance, meetingTypeId: string) {
+  return instance.inject({ method: 'GET', url: '/bookings', query: { meetingTypeId } })
+}
+
 /** Tuesday 12:00 in Europe/Moscow; the window starts tomorrow (2026-11-18). */
 function freeze(now = '2026-11-17T09:00:00Z') {
   vi.useFakeTimers({ toFake: ['Date'] })
@@ -219,6 +223,81 @@ describe('GET /bookings', () => {
 
     vi.setSystemTime(new Date('2026-11-18T06:30:00Z'))
     const ended = await upcomingByGuestName(instance, 'anna')
+    expect(ended.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([later.id])
+  })
+
+  it('filters by meeting type while preserving start and UUID ordering', async () => {
+    freeze()
+    const instance = await build()
+    const short = await createType(instance, 'Короткий', 30)
+    const long = await createType(instance, 'Длинный', 45)
+    const later = await book(instance, short, '2026-11-18T08:00:00Z', 'Борис')
+    const earlier = await book(instance, short, '2026-11-18T06:00:00Z', 'Анна')
+    await book(instance, long, '2026-11-18T07:00:00Z', 'Вера')
+
+    const response = await upcomingByMeetingType(instance, short)
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json<Array<{ id: string }>>()
+    expect(body.map(({ id }) => id)).toEqual([earlier.id, later.id])
+    expect(body.every(({ meetingType }) => meetingType.id === short)).toBe(true)
+    assertContractResponse(listOperation, response.statusCode, body)
+  })
+
+  it('combines the meeting-type and guest-name filters with AND', async () => {
+    freeze()
+    const instance = await build()
+    const short = await createType(instance, 'Короткий', 30)
+    const long = await createType(instance, 'Длинный', 45)
+    const matching = await book(instance, short, '2026-11-18T06:00:00Z', 'Anna Petrova')
+    await book(instance, short, '2026-11-18T07:00:00Z', 'Boris')
+    await book(instance, long, '2026-11-18T08:00:00Z', 'Anna Petrova')
+
+    const response = await instance.inject({
+      method: 'GET',
+      url: '/bookings',
+      query: { meetingTypeId: short, guestName: '  anna  ' }
+    })
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json<Array<{ id: string }>>()
+    expect(body.map(({ id }) => id)).toEqual([matching.id])
+    assertContractResponse(listOperation, response.statusCode, body)
+  })
+
+  it('rejects a malformed meeting type UUID and returns 200 [] for an unknown one', async () => {
+    freeze()
+    const instance = await build()
+    const id = await createType(instance, 'Звонок', 30)
+    await book(instance, id, '2026-11-18T06:00:00Z', 'Анна')
+
+    const malformed = await upcomingByMeetingType(instance, 'not-a-uuid')
+    expect(malformed.statusCode).toBe(400)
+    expect(malformed.json()).toMatchObject({ code: 'VALIDATION_ERROR' })
+    assertContractResponse(listOperation, malformed.statusCode, malformed.json())
+
+    const unknown = await upcomingByMeetingType(instance, '99999999-9999-4999-8999-999999999999')
+    expect(unknown.statusCode).toBe(200)
+    expect(unknown.json()).toEqual([])
+    assertContractResponse(listOperation, unknown.statusCode, unknown.json())
+  })
+
+  it('keeps the end > now rule with an active meeting-type filter', async () => {
+    freeze('2026-11-17T05:00:00Z')
+    const instance = await build()
+    const id = await createType(instance, 'Звонок', 30)
+    const ongoing = await book(instance, id, '2026-11-18T06:00:00Z', 'Анна')
+    const later = await book(instance, id, '2026-11-18T07:00:00Z', 'Борис')
+
+    vi.setSystemTime(new Date('2026-11-18T06:15:00Z'))
+    const inProgress = await upcomingByMeetingType(instance, id)
+    expect(inProgress.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([
+      ongoing.id,
+      later.id
+    ])
+
+    vi.setSystemTime(new Date('2026-11-18T06:30:00Z'))
+    const ended = await upcomingByMeetingType(instance, id)
     expect(ended.json<Array<{ id: string }>>().map(({ id: found }) => found)).toEqual([later.id])
   })
 

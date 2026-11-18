@@ -11,7 +11,14 @@ export async function prepareContractScenario(
   const request = structuredClone(scenario.request ?? {})
   const body = request.body as Record<string, unknown> | undefined
   const unknownType = scenario.name === 'unknown-type'
-  const upcomingWithBooking = ['populated', 'filtered', 'trimmed-filter', 'empty-filter']
+  const upcomingWithBooking = [
+    'populated',
+    'filtered',
+    'trimmed-filter',
+    'empty-filter',
+    'filtered-by-type',
+    'filtered-by-type-and-name'
+  ]
   const needsType =
     (operationId === 'listMeetingTypes' && scenario.name === 'populated') ||
     (operationId === 'listUpcomingBookings' && upcomingWithBooking.includes(scenario.name)) ||
@@ -53,10 +60,38 @@ export async function prepareContractScenario(
     const requestedGuestName =
       typeof request.query?.guestName === 'string' ? request.query.guestName.trim() : ''
     const guestName =
-      ['filtered', 'trimmed-filter'].includes(scenario.name) && requestedGuestName
+      ['filtered', 'trimmed-filter', 'filtered-by-type-and-name'].includes(scenario.name) &&
+      requestedGuestName
         ? requestedGuestName
         : 'Example guest'
     await seedBooking('2026-11-18T06:00:00Z', guestName)
+  }
+  if (
+    operationId === 'listUpcomingBookings' &&
+    ['filtered-by-type', 'filtered-by-type-and-name'].includes(scenario.name)
+  ) {
+    const otherType = await instance.inject({
+      method: 'POST',
+      url: '/meeting-types',
+      payload: { name: 'Other contract type', durationMinutes: 45 }
+    })
+    expect(otherType.statusCode, 'scenario preparation requires POST /meeting-types → 201').toBe(
+      201
+    )
+    const otherTypeId = otherType.json<{ id: string }>().id
+    const otherSaved = await instance.inject({
+      method: 'POST',
+      url: '/bookings',
+      payload: {
+        meetingTypeId: otherTypeId,
+        start: '2026-11-18T08:00:00Z',
+        guestName: scenario.name === 'filtered-by-type-and-name' ? 'Alex' : 'Other guest'
+      }
+    })
+    expect(otherSaved.statusCode, 'scenario preparation requires POST /bookings → 201').toBe(201)
+    if (scenario.name === 'filtered-by-type-and-name') {
+      await seedBooking('2026-11-18T07:00:00Z', 'Boris')
+    }
   }
   if (operationId === 'getAvailability' && scenario.name === 'empty') {
     // All ten working dates in [2026-11-18, 2026-12-02), 09:00–18:00 Moscow.
