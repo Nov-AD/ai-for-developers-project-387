@@ -99,9 +99,27 @@ test('clean report is empty; training is explicit, stable and only used on a cle
   const training = normalizeReport({ results: [] }, true)
   assert.equal(training.findings.length, 1)
   assert.equal(training.findings[0].source, 'training')
+  assert.equal(training.findings[0].ecosystem, 'npm')
+  assert.equal(training.findings[0].name, 'picomatch')
+  assert.equal(training.findings[0].id, 'CVE-2026-112366')
+  assert.deepEqual(training.findings[0].aliases, ['CVE-2026-112366', 'GHSA-fc5q-39xc-vjpf'])
   assert.match(training.findings[0].summary, /Учебная задача/u)
+  assert.match(training.findings[0].summary, /отозван 18 ноября 2026/u)
   assert.deepEqual(training, normalizeReport({ results: [] }, true))
   assert.deepEqual(normalizeReport(report(), true), normalizeReport(report()))
+})
+
+test('training advisory cannot deduplicate a real finding for the same package and CVE', async () => {
+  const raw = report({ id: 'GHSA-fc5q-39xc-vjpf', aliases: ['CVE-2026-112366'] })
+  raw.results[0].packages[0].package.name = 'picomatch'
+  const real = normalizeReport(raw)
+  const training = normalizeReport({ results: [] }, true)
+  assert.notEqual(training.findings[0].key, real.findings[0].key)
+  const { api, issues } = fakeApi()
+  await publishAudit(api, 'owner/repo', training, proposal(training), run)
+  const result = await publishAudit(api, 'owner/repo', real, proposal(real), run)
+  assert.equal(result[0].action, 'created')
+  assert.equal(issues.length, 2)
 })
 
 test('malformed or oversized OSV report fails rather than reporting no findings', () => {
@@ -238,7 +256,10 @@ test('training issue uses the same automatic publisher and is deduplicated', asy
   await publishAudit(api, 'owner/repo', input, proposal(input), run)
   const second = await publishAudit(api, 'owner/repo', input, proposal(input), run)
   assert.match(issues[0].title, /^\[Учебная задача\]/u)
+  assert.match(issues[0].title, /picomatch: CVE-2026-112366/u)
   assert.match(issues[0].body, /не реальная уязвимость/u)
+  assert.match(issues[0].body, /GHSA-fc5q-39xc-vjpf/u)
+  assert.match(issues[0].body, /отозван 18 ноября 2026/u)
   assert.equal(second[0].action, 'reused')
   assert.equal(issues.length, 1)
 })
