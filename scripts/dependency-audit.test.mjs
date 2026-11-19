@@ -312,11 +312,13 @@ function pipelineFixture(t, scannerReport = { results: [] }, scannerStatus = 0) 
     `
     if (process.env.GH_TOKEN || process.env.GITHUB_TOKEN || process.env.OPENCODE_CONFIG_CONTENT) process.exit(99);
     if (process.argv[2] === 'debug') {
+      if (process.env.OPENAI_API_KEY) process.exit(99);
       console.log(JSON.stringify([{id: 'dependency-audit', mode: 'primary', steps: 4,
         permissions: [{action: '*', resource: '*', effect: 'deny'}]}]));
     } else {
+      if (process.env.OPENAI_API_KEY !== 'test-only-openai-key') process.exit(98);
       const modelIndex = process.argv.indexOf('--model');
-      if (modelIndex === -1 || process.argv[modelIndex + 1] !== 'opencode/deepseek-v4.1-flash-free') process.exit(99);
+      if (modelIndex === -1 || process.argv[modelIndex + 1] !== 'openai/gpt-6.1-sol') process.exit(99);
       const prompt = process.argv.at(-1);
       const input = JSON.parse(prompt.slice(prompt.indexOf('\\n') + 1));
       console.log(JSON.stringify({type: 'text', part: {text: JSON.stringify({
@@ -363,6 +365,7 @@ function pipelineFixture(t, scannerReport = { results: [] }, scannerStatus = 0) 
         AUDIT_TRAINING: 'true',
         GH_TOKEN: 'test-only-token',
         GITHUB_TOKEN: 'test-only-token',
+        OPENAI_API_KEY: 'test-only-openai-key',
         OPENCODE_CONFIG_CONTENT: '{"untrusted":"ambient config must not reach model"}',
         GITHUB_REPOSITORY: 'owner/repo',
         GITHUB_SHA: sha,
@@ -401,9 +404,26 @@ test('full pipeline saves evidence outside checkout and automatically deduplicat
     'report.md'
   ]) {
     assert.ok(existsSync(join(fixture.directory, file)), file)
+    assert.ok(!readFileSync(join(fixture.directory, file), 'utf8').includes('test-only-openai-key'))
   }
   assert.ok(!existsSync(join(fixture.directory, 'agent-home')))
   assert.match(readFileSync(join(fixture.directory, 'report.md'), 'utf8'), /Статус: success/u)
+})
+
+test('analysis requires an OpenAI key before starting the CLI and saves an actionable failure', (t) => {
+  for (const key of ['', '   ']) {
+    const fixture = pipelineFixture(t)
+    assert.equal(fixture.execute('scan').status, 0)
+    const result = fixture.execute('analyze', { OPENAI_API_KEY: key })
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /OPENAI_API_KEY is required/u)
+    assert.ok(!existsSync(join(fixture.directory, 'agent-policy.log')))
+    assert.ok(!existsSync(join(fixture.directory, 'proposal.json')))
+    assert.match(
+      readFileSync(join(fixture.directory, 'failure.txt'), 'utf8'),
+      /OPENAI_API_KEY is required/u
+    )
+  }
 })
 
 test('scanner finding exit code is accepted and reaches analysis, without a training finding', (t) => {

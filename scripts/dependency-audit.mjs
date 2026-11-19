@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { modelEnvironment } from './auto-triage.mjs'
 
-const model = 'opencode/deepseek-v4.1-flash-free'
+const model = 'openai/gpt-6.1-sol'
 const marker = (key) => `<!-- opencode:dependency-audit:v1:${key} -->`
 const lockfiles = [
   'pnpm-lock.yaml',
@@ -305,6 +305,8 @@ function scan(directory) {
 function analyze(directory) {
   const executable = process.env.AUDIT_CLI
   assert.ok(executable, 'AUDIT_CLI must point to the locked executable')
+  const apiKey = process.env.OPENAI_API_KEY
+  assert.ok(apiKey?.trim(), 'OPENAI_API_KEY is required; configure the Actions secret')
   const input = read(directory, 'input.json')
   const home = join(process.env.RUNNER_TEMP, 'dependency-audit-home')
   mkdirSync(home, { recursive: true })
@@ -339,7 +341,7 @@ function analyze(directory) {
       model,
       prompt
     ],
-    options
+    { ...options, env: { ...options.env, OPENAI_API_KEY: apiKey } }
   )
   save(directory, 'agent-output.jsonl', result.stdout ?? '')
   save(directory, 'agent-stderr.log', result.stderr ?? '')

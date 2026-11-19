@@ -46,9 +46,10 @@ jobs:
       - name: Install locked OpenCode V2 CLI
         run: npm ci --prefix .github/auto-triage
 
-      - name: Analyze report without credentials or mutation tools
+      - name: Analyze report without GitHub credentials or mutation tools
         env:
           AUDIT_CLI: ${{ github.workspace }}/.github/auto-triage/node_modules/.bin/opencode
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node scripts/dependency-audit.mjs analyze
 
       - name: Create finding issues, reusing existing open or closed issues
