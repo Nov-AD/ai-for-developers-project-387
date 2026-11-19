@@ -44,7 +44,7 @@ mise run fix
 ```bash
 mise run contract:breaking   # на PR: OpenAPI против базовой ветви
 mise run secrets             # вся Git-история
-mise run audit               # pnpm audit с точечным исключением ниже
+mise run audit               # OSV-Scanner по lock-файлам
 ```
 
 ### Три уровня запуска
@@ -80,43 +80,7 @@ CI выполняет `mise run codegen`, затем `git diff --exit-code`. Е�
 - vacuum сейчас показывает 5 warnings: нет примеров ответов и тега операции. Они не блокируют сборку, но минимальный score 90 не даст качеству упасть.
 - dependency-cruiser не поддерживает TypeScript 7.0, поэтому весь монорепо использует TypeScript 6.x. Это ограничение инструмента, а не запрет на обновление: при выходе совместимой версии можно вернуться к 7.x.
 - commitlint проверяет только новые коммиты: история до внедрения написана без Conventional Commits.
-
-### Временное исключение GHSA-fc5q-39xc-vjpf
-
-17 ноября 2026 года владелец явно согласовал принятие риска только для
-[`GHSA-fc5q-39xc-vjpf`](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
-(`CVE-2026-112366`, `picomatch <=4.0.7`) в
-[репозитории 387, задача #1](https://github.com/Nov-AD/ai-for-developers-project-387/issues/1).
-В `pnpm-workspace.yaml` поле `auditConfig.ignoreGhsas` исключает только этот
-GHSA из `pnpm audit`, который запускает `mise run audit`. Остальные advisory и уровни
-серьёзности проверяются как раньше; production- и dev-зависимости остаются
-в области сканирования. Репозиторий 386 не меняется.
-
-Основания:
-
-- [Snyk отозвал advisory](https://security.snyk.io/vuln/SNYK-JS-PICOMATCH-21248802),
-  но GitHub/npm продолжают учитывать его; это расхождение, а не доказательство
-  отсутствия проблемы.
-- [Мейнтейнер](https://github.com/micromatch/picomatch/pull/235#issuecomment-6315749381)
-  не рекомендует принимать glob/regex-шаблоны от недоверенных пользователей.
-  Проект не предоставляет пользователям такую возможность.
-- `pnpm why picomatch --recursive --prod` не находит production-зависимостей;
-  библиотека используется Vite, Vitest, Knip и dependency-cruiser при разработке.
-  `pnpm audit --prod` на дату решения проходит.
-- Официального исправленного релиза на дату решения нет. Патч не установлен:
-  исключение принимает остаточный риск, а не устраняет backtracking.
-
-**Ручной пересмотр — не позднее 1 декабря 2026 года**, либо раньше при выходе
-исправленного релиза, изменении статуса advisory, появлении `picomatch` в
-production или недоверенных glob-шаблонов. Дата не отключает исключение
-автоматически. Ответственный — владелец репозитория. После устранения
-необходимости удалить этот GHSA из `auditConfig.ignoreGhsas` и повторить
-полный аудит.
-
-Для проверки без исключения временно убрать этот GHSA из `auditConfig.ignoreGhsas`
-и запустить `pnpm audit`. Для проверки production: `pnpm audit --prod`.
-Не добавлять `--ignore-unfixable`, повышение порога серьёзности или подавление
-кода возврата.
+- Исключение [`GHSA-fc5q-39xc-vjpf`](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) (`CVE-2026-112366`, `picomatch`) удалено 19 ноября 2026 года: GitHub и OSV отозвали advisory 18 ноября 2026 года. Аудит проходит без исключений.
 
 ## Как проверялось, что гейты падают
 
