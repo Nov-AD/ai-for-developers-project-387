@@ -67,18 +67,18 @@ export function normalizeReport(report, training = false) {
     }
   }
   if (training && findings.size === 0) {
-    const key = findingKey('training', 'calendar-audit-training', 'TRAINING-0001', 'training')
+    const key = findingKey('npm', 'picomatch', 'CVE-2026-112366', 'training')
     findings.set(key, {
       key,
       source: 'training',
-      ecosystem: 'training',
-      name: 'calendar-audit-training',
-      id: 'TRAINING-0001',
-      aliases: ['TRAINING-0001'],
-      locations: ['Synthetic example only; not present in any lockfile'],
+      ecosystem: 'npm',
+      name: 'picomatch',
+      id: 'CVE-2026-112366',
+      aliases: ['CVE-2026-112366', 'GHSA-fc5q-39xc-vjpf'],
+      locations: ['Prepared training report: picomatch 4.0.7; not a finding from this OSV scan'],
       fixed: [],
       summary:
-        'Учебная задача: демонстрация создания Issue и защиты от дублей. Не уязвимость проекта.'
+        'Учебная задача: подготовленный пример ReDoS в picomatch по GHSA-fc5q-39xc-vjpf / CVE-2026-112366. Advisory отозван 18 ноября 2026 года; текущий скан OSV его не обнаружил. Это демонстрация создания Issue и защиты от дублей, не подтверждённый дефект приложения.'
     })
   }
   assert.ok(findings.size <= 50, 'too many findings for unattended analysis; human required')
@@ -145,7 +145,14 @@ export function renderFinding(finding, analysis, run) {
     '> Создано автоматически по анализу OpenCode (AI); требуется проверка человеком.',
     '',
     ...(training
-      ? ['## Учебная задача', '', 'Синтетический пример. Это не реальная уязвимость проекта.', '']
+      ? [
+          '## Учебная задача',
+          '',
+          'Синтетический пример. Это не реальная уязвимость проекта.',
+          '',
+          plain(finding.summary),
+          ''
+        ]
       : []),
     `**Зависимость:** ${plain(finding.ecosystem)} / ${plain(finding.name)}`,
     `**Идентификаторы:** ${finding.aliases.map(plain).join(', ')}`,
